@@ -4,8 +4,8 @@ use rand::Rng;
 // (hopefully) fully befunge93 compliant
 
 pub struct Position<T> {
-    x: T,
-    y: T,
+    pub x: T,
+    pub y: T,
 }
 
 pub enum Direction {
@@ -218,12 +218,7 @@ impl FungedState {
                 }
 
                 // Bridge (skip next cell)
-                b'#' => match self.direction {
-                    Direction::Up => self.position.y -= 1,
-                    Direction::Down => self.position.y += 1,
-                    Direction::Left => self.position.x -= 1,
-                    Direction::Right => self.position.x += 1,
-                },
+                b'#' => self.step_forward(),
 
                 // Space manipulation
                 // TODO: make temporary and add rollback function or similar
@@ -290,14 +285,18 @@ impl FungedState {
             }
         }
 
-        match self.direction {
-            Direction::Up => self.position.y -= 1,
-            Direction::Down => self.position.y += 1,
-            Direction::Left => self.position.x -= 1,
-            Direction::Right => self.position.x += 1,
-        }
+        self.step_forward();
 
         NeedsInputType::None
+    }
+
+    fn step_forward(&mut self) {
+        match self.direction {
+            Direction::Up => self.position.y = self.position.y.wrapping_sub(1),
+            Direction::Down => self.position.y = self.position.y.wrapping_add(1),
+            Direction::Left => self.position.x = self.position.x.wrapping_sub(1),
+            Direction::Right => self.position.x = self.position.x.wrapping_add(1),
+        }
     }
 }
 
@@ -453,6 +452,7 @@ mod tests {
 
         run_until_completion(&mut state);
         assert_eq!(state.stack, vec![b'r' as u64, b' ' as u64]);
+        assert_eq!(state.get(9, 7), b'r' as u64);
     }
 
     #[test]
@@ -468,5 +468,27 @@ mod tests {
         run_until_completion(&mut state);
 
 
+    }
+
+    #[test]
+    fn wrapping() {
+        let mut state = FungedState::new();
+        state.setc(0, 0, '^');
+        state.setc(0, u64::MAX, '<');
+        state.setc(u64::MAX, u64::MAX, 'v');
+        state.setc(u64::MAX, 0, '>');
+
+        state.do_step();
+        assert_eq!(state.position.x, 0);
+        assert_eq!(state.position.y, u64::MAX);
+        state.do_step();
+        assert_eq!(state.position.x, u64::MAX);
+        assert_eq!(state.position.y, u64::MAX);
+        state.do_step();
+        assert_eq!(state.position.x, u64::MAX);
+        assert_eq!(state.position.y, 0);
+        state.do_step();
+        assert_eq!(state.position.x, 0);
+        assert_eq!(state.position.y, 0);
     }
 }

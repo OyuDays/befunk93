@@ -5,4 +5,6 @@ edition = "2024"
 
 [dependencies]
 ahash = "0.8.12"
+crossterm = "0.29.0"
 rand = "0.9.2"
+ratatui = "0.29.0"
