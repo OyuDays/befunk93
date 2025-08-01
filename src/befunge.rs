@@ -29,6 +29,7 @@ impl<T> Position<T> {
 
 pub struct FungedState {
     pub map: HashMap<(u64, u64), u64>,
+    pub put_map: HashMap<(u64, u64), u64>,
     pub is_string_mode: bool,
     pub position: Position<u64>,
     pub direction: Direction,
@@ -44,10 +45,12 @@ impl Default for FungedState {
     }
 }
 
+#[allow(dead_code)]
 impl FungedState {
     pub fn new() -> Self {
         Self {
             map: HashMap::default(),
+            put_map: HashMap::default(),
             is_string_mode: false,
             position: Position::new(0, 0),
             direction: Direction::Right,
@@ -79,7 +82,8 @@ impl FungedState {
     }
 
     pub fn get(&self, x: u64, y: u64) -> u64 {
-        *self.map.get(&(x, y)).unwrap_or(&(b' ' as u64))
+        *self.put_map.get(&(x, y)).unwrap_or(
+            self.map.get(&(x, y)).unwrap_or(&(b' ' as u64)))
     }
 
     pub fn set(&mut self, x: u64, y: u64, v: u64) {
@@ -88,6 +92,17 @@ impl FungedState {
 
     pub fn setc(&mut self, x: u64, y: u64, v: char) {
         self.map.insert((x, y), v as u64);
+    }
+
+    pub fn restart(&mut self) {
+        self.position = Position::new(0, 0);
+        self.direction = Direction::Right;
+        self.is_string_mode = false;
+        self.is_running = false;
+        self.stack.clear();
+        self.output.clear();
+        self.input.clear();
+        self.put_map.clear();
     }
 
     pub fn do_step(&mut self) -> NeedsInputType {
@@ -228,7 +243,7 @@ impl FungedState {
                     let x = self.stack.pop().unwrap_or(0);
                     let v = self.stack.pop().unwrap_or(0);
 
-                    self.set(x, y, v);
+                    self.put_map.insert((x, y), v);
                 }
                 // get (pop y,x and push value at x,y)
                 b'g' => {

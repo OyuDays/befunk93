@@ -57,7 +57,8 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
 
     let commands = Paragraph::new(Text::from(vec![
             Line::from(vec![Span::styled("^S", Style::new().blue()), Span::raw("tep")]), // Step
-            Line::from(vec![Span::styled("^C", Style::new().blue()), Span::raw("ancel")]), // Step
+            Line::from(vec![Span::styled("^C", Style::new().blue()), Span::raw("ancel")]), // Cancel
+            Line::from(vec![Span::styled("^R", Style::new().blue()), Span::raw("estart")]), // Restart
         ]))
         .block(block.title("commands:"))
         .style(Style::new().white())
@@ -65,7 +66,7 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
 
     let inner_layout = Layout::default()
         .direction(layout::Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(10), Constraint::Length(3)])
+        .constraints([Constraint::Min(10), Constraint::Length(10), Constraint::Length(4)])
         .split(Rect::new(0, 0, area.width, area.height));
 
     frame.render_widget(list, inner_layout[0]);
@@ -122,7 +123,9 @@ fn main() {
                                 's' => {
                                     // TODO: handle input
                                     let _ = state.do_step();
-                                }
+                                },
+                                'r' => state.restart(),
+
                                 _ => (),
                             }
                         }
