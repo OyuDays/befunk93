@@ -4,13 +4,14 @@ use crossterm::{
     terminal::{self},
 };
 use ratatui::{
-    backend::CrosstermBackend, layout::{self, Constraint, Layout, Rect}, style::{Color, Style, Stylize}, text::{self, Line, Span, Text}, widgets::{Block, Borders, List, Padding, Paragraph, Wrap}, Frame, Terminal
+    Frame, Terminal,
+    backend::CrosstermBackend,
+    layout::{self, Constraint, Layout, Rect},
+    style::{Color, Style, Stylize},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, List, Padding, Paragraph, Wrap},
 };
-use std::{
-    io::{Stdout, Write, stdout},
-    thread,
-    time::Duration,
-};
+use std::{io::stdout, thread, time::Duration};
 mod befunge;
 use befunge::*;
 
@@ -24,7 +25,12 @@ fn draw_space(frame: &mut Frame, state: &FungedState, area: Rect, offset: Positi
             let char = char::from_u32(state.get(x.into(), y.into()).try_into().unwrap_or(0))
                 .unwrap_or('�');
             span = if char.is_control() || char.is_whitespace() {
-                span.content(" ")
+                if char == ' ' {
+                    span.content(" ")
+                } else {
+                    line.push_span(span.content("X").style(Style::default().fg(Color::Red)));
+                    break;
+                }
             } else {
                 span.content(char.to_string())
             };
@@ -53,20 +59,34 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
     let output = Paragraph::new(state.output.clone())
         .block(block.clone().title("output:"))
         .style(Style::new().white())
-        .wrap(Wrap {trim: false });
+        .wrap(Wrap { trim: false });
 
-    let commands = Paragraph::new(Text::from(vec![
-            Line::from(vec![Span::styled("^S", Style::new().blue()), Span::raw("tep")]), // Step
-            Line::from(vec![Span::styled("^C", Style::new().blue()), Span::raw("ancel")]), // Cancel
-            Line::from(vec![Span::styled("^R", Style::new().blue()), Span::raw("estart")]), // Restart
-        ]))
+    let commands_vec = vec![
+        Line::from(vec![
+            Span::styled("^S", Style::new().blue()),
+            Span::raw("tep"),
+        ]), // Step
+        Line::from(vec![
+            Span::styled("^C", Style::new().blue()),
+            Span::raw("ancel"),
+        ]), // Cancel
+        Line::from(vec![
+            Span::styled("^R", Style::new().blue()),
+            Span::raw("estart"),
+        ]), // Restart
+    ];
+
+    let commands = List::new(commands_vec.clone())
         .block(block.title("commands:"))
-        .style(Style::new().white())
-        .wrap(Wrap {trim: false });
+        .style(Style::new().white());
 
     let inner_layout = Layout::default()
         .direction(layout::Direction::Vertical)
-        .constraints([Constraint::Min(10), Constraint::Length(10), Constraint::Length(4)])
+        .constraints([
+            Constraint::Min(10),
+            Constraint::Length(10),
+            Constraint::Length((commands_vec.len() + 1).try_into().unwrap()),
+        ])
         .split(Rect::new(0, 0, area.width, area.height));
 
     frame.render_widget(list, inner_layout[0]);
@@ -100,12 +120,16 @@ fn main() {
                 draw_sidebar(frame, &state, layout[0]);
 
                 frame.set_cursor_position(layout::Position::new(
-                    cursorpos.x.wrapping_add(layout[1].x as u64)
+                    cursorpos
+                        .x
+                        .wrapping_add(layout[1].x as u64)
                         .clamp(layout[1].x.into(), layout[1].width.into())
                         .try_into()
                         .unwrap(), // still has some weird behaviour on right edge but thats a problem for
-                                   // future me :)
-                    cursorpos.y.wrapping_add(layout[1].y as u64)
+                    // future me :)
+                    cursorpos
+                        .y
+                        .wrapping_add(layout[1].y as u64)
                         .clamp(layout[1].y.into(), layout[1].height.into())
                         .try_into()
                         .unwrap(),
@@ -123,7 +147,7 @@ fn main() {
                                 's' => {
                                     // TODO: handle input
                                     let _ = state.do_step();
-                                },
+                                }
                                 'r' => state.restart(),
 
                                 _ => (),
