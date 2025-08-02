@@ -182,7 +182,11 @@ impl FungedState {
                 b'/' => {
                     let a = self.stack.pop().unwrap_or(0);
                     let b = self.stack.pop().unwrap_or(0);
-                    self.stack.push(b.wrapping_div(a));
+                    if a == 0 { // divide by zero protection
+                        self.stack.push(i64::MAX);
+                    } else {
+                        self.stack.push(b.wrapping_div(a));
+                    }
                 }
                 b'%' => {
                     let a = self.stack.pop().unwrap_or(0);
@@ -548,7 +552,7 @@ mod tests {
         assert_eq!(state.position.y, 0);
     }
 
-    // this test is solely to make sure it doesnt crash
+    // this test checks for crashes
     #[test]
     fn wrapping_stack() {
         let mut state = FungedState::new();
@@ -556,6 +560,15 @@ mod tests {
         state.stack.push(i64::MAX);
         state.map_from_string("1+1-2*@");
 
+        run_until_completion(&mut state);
+    }
+
+    // this test checks for crashes
+    #[test]
+    fn divide_by_zero() {
+        let mut state = FungedState::new();
+
+        state.map_from_string("10/@");
         run_until_completion(&mut state);
     }
 }
