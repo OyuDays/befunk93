@@ -459,8 +459,9 @@ impl App {
             if self.autoplay {
                 self.do_step();
             }
-            // we don't need more than 30 fps
-            thread::sleep(Duration::from_millis((1.0 / 30.0 * 1000.0) as u64));
+            // TODO: make fps configurable
+            // uncapping takes alot of cpu
+            thread::sleep(Duration::from_millis((1.0 / 60.0 * 1000.0) as u64));
         }
     }
 }
