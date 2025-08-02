@@ -112,6 +112,11 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
             Span::styled("^P", Style::new().blue()),
             Span::raw("laypause"),
         ]),
+        // Follow
+        Line::from(vec![
+            Span::styled("^F", Style::new().blue()),
+            Span::raw("ollow"),
+        ]),
         // Reset
         Line::from(vec![
             Span::styled("^R", Style::new().blue()),
@@ -322,6 +327,7 @@ impl App {
         match key {
             'c' => self.should_stop = true,
             's' => self.do_step(),
+            'f' => self.cursorpos = self.state.position.clone(),
             'r' => self.state.restart(),
             'p' => self.autoplay = !self.autoplay,
             'o' => {
