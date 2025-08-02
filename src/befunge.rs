@@ -1,3 +1,5 @@
+use std::iter;
+
 use ahash::HashMap;
 use rand::Rng;
 
@@ -69,17 +71,38 @@ impl FungedState {
             }
         }
     }
-
-    pub fn print(&mut self, width: u16, height: u16) {
-        for y in 0..height {
-            for x in 0..width {
-                print!("{}", char::from_u32(self.get(x, y)
-                .try_into()
-                .unwrap_or(b' ' as u32)).unwrap()
-                );
+    
+    // referenced from https://github.com/PartyWumpus/befunge-editor/blob/main/src/befunge.rs#L152
+    // (thanks a ton, partywumpus)
+    pub fn map_to_string(&mut self) -> String {
+        let mut height: usize = 0;
+        for (_x, y) in self.map.keys() {
+            if *y as usize > height {
+                height = *y as usize
             }
-            println!();
         }
+
+        let mut lines: Vec<Vec<char>> = vec![vec![]; height+1];
+        let entries = self.map.keys().map(|(x,y)| { ((*x,*y), *self.map.get(&(*x, *y)).unwrap()) });
+
+        for ((x, y), v) in entries {
+            let line = &mut lines[y as usize];
+            if x as usize >= line.len() {
+                line.extend(iter::repeat_n(' ', x as usize - line.len()));
+                assert_ne!(v, '\n' as i64);
+                assert_ne!(v, '\r' as i64);
+                line.push(char::from_u32(v as u32).expect("failed to turn map into string"));
+            } else {
+                line[x as usize] = char::from_u32(v as u32).expect("failed to turn map into string");
+            }
+        }
+
+        let mut out = String::new();
+        for line in lines {
+            out.push_str(&line.iter().collect::<String>());
+            out.push('\n');
+        }
+        out
     }
 
     pub fn get(&self, x: u16, y: u16) -> i64 {

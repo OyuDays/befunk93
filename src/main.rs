@@ -14,10 +14,7 @@ use ratatui::{
     widgets::{Block, Borders, List, Padding, Paragraph, Wrap},
 };
 use std::{
-    io::{Stdout, stdout, Read},
-    thread,
-    time::Duration,
-    fs::File
+    fs::File, io::{stdout, Read, Stdout, Write}, thread, time::Duration
 };
 mod befunge;
 use befunge::*;
@@ -107,6 +104,11 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
         Line::from(vec![
             Span::styled("^R", Style::new().blue()),
             Span::raw("estart"),
+        ]),
+        // Write
+        Line::from(vec![
+            Span::styled("^W", Style::new().blue()),
+            Span::raw("rite"),
         ]),
         // Open
         Line::from(vec![
@@ -199,6 +201,13 @@ impl App {
         Ok(string)
     }
 
+    fn write_file(&mut self, filename: &str, contents: String) -> std::io::Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(contents.as_bytes())?;
+
+        Ok(())
+    }
+
     fn draw(&mut self) {
         self.terminal
             .draw(|frame| {
@@ -262,6 +271,12 @@ impl App {
                                 },
                             }
                         },
+                        CommandType::WriteFile => {
+                            let contents = self.state.map_to_string();
+                            if let Err(err) = self.write_file(&self.command.clone(), contents) {
+                                self.command = err.to_string();
+                            }
+                        }
 
                         CommandType::Command => todo!(),
                     }
@@ -283,11 +298,17 @@ impl App {
             'r' => self.state.restart(),
             'p' => self.autoplay = !self.autoplay,
             'o' => {
-                self.command_prompt = String::from("Enter file");
+                self.command_prompt = String::from("Open file");
                 self.command.clear();
                 self.input_mode = InputMode::Command;
                 self.command_type = CommandType::OpenFile;
-            }
+            },
+            'w' => {
+                self.command_prompt = String::from("Write file");
+                self.command.clear();
+                self.input_mode = InputMode::Command;
+                self.command_type = CommandType::WriteFile;
+            },
 
             _ => (),
         }
@@ -440,4 +461,5 @@ enum CommandType {
     Command,
     BefungeInput,
     OpenFile,
+    WriteFile,
 }
