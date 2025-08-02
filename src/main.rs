@@ -180,12 +180,12 @@ fn main() {
                     cursorpos
                         .x
                         .wrapping_add(space_area.x)
-                        .clamp(space_area.x, space_area.width),
+                        .clamp(space_area.x, space_area.x + space_area.width),
                     // still has some weird behaviour on right edge but thats a problem for future me :)
                     cursorpos
                         .y
                         .wrapping_add(space_area.y)
-                        .clamp(space_area.y, space_area.height),
+                        .clamp(space_area.y, space_area.y + space_area.height),
                 ));
             })
             .expect("failed to draw frame");
