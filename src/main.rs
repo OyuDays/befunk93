@@ -39,7 +39,7 @@ fn draw_space(
     cursorpos: Position<u16>,
 ) {
     let mut text = Text::default();
-    for y in offset.y + 1..offset.y + 1 + area.height {
+    for y in offset.y..offset.y + area.height {
         let mut line = Line::default();
         for x in offset.x..offset.x + area.width {
             let mut span = Span::default();
@@ -112,10 +112,10 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
             Span::styled("^P", Style::new().blue()),
             Span::raw("laypause"),
         ]),
-        // Restart
+        // Reset
         Line::from(vec![
             Span::styled("^R", Style::new().blue()),
-            Span::raw("estart"),
+            Span::raw("eset"),
         ]),
         // Write
         Line::from(vec![
@@ -127,10 +127,10 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
             Span::styled("^O", Style::new().blue()),
             Span::raw("pen"),
         ]),
-        // Cancel
+        // Close
         Line::from(vec![
             Span::styled("^C", Style::new().blue()),
-            Span::raw("ancel"),
+            Span::raw("lose"),
         ]),
     ];
 
