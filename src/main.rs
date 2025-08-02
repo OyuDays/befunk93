@@ -97,6 +97,11 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
             Span::styled("^S", Style::new().blue()),
             Span::raw("tep"),
         ]),
+        // Playpause
+        Line::from(vec![
+            Span::styled("^P", Style::new().blue()),
+            Span::raw("laypause"),
+        ]),
         // Restart
         Line::from(vec![
             Span::styled("^R", Style::new().blue()),
@@ -137,6 +142,8 @@ struct App {
     pub camera_offset: Position<u16>,
     pub space_area: Rect,
 
+    pub autoplay: bool,
+
     pub input_mode: InputMode,
     pub command_type: CommandType,
 
@@ -165,6 +172,8 @@ impl App {
             state: FungedState::new(),
             camera_offset: Position::new(0, 0),
             space_area: Rect::default(),
+
+            autoplay: false,
 
             input_mode: InputMode::Normal,
             command_type: CommandType::Command,
@@ -246,20 +255,9 @@ impl App {
     fn handle_control_keys(&mut self, key: char) {
         match key {
             'c' => self.should_stop = true,
-            's' => match self.state.do_step() {
-                NeedsInputType::None => (),
-                NeedsInputType::Decimal => {
-                    self.command_prompt = String::from("Enter Decimal");
-                    self.input_mode = InputMode::Command;
-                    self.command_type = CommandType::BefungeInput;
-                }
-                NeedsInputType::Character => {
-                    self.command_prompt = String::from("Enter Character");
-                    self.input_mode = InputMode::Command;
-                    self.command_type = CommandType::BefungeInput;
-                }
-            },
+            's' => self.do_step(),
             'r' => self.state.restart(),
+            'p' => self.autoplay = !self.autoplay,
 
             _ => (),
         }
@@ -351,10 +349,30 @@ impl App {
         }
     }
 
+    pub fn do_step(&mut self) {
+        match self.state.do_step() {
+            NeedsInputType::None => (),
+            NeedsInputType::Decimal => {
+                self.command_prompt = String::from("Enter Decimal");
+                self.input_mode = InputMode::Command;
+                self.command_type = CommandType::BefungeInput;
+            }
+            NeedsInputType::Character => {
+                self.command_prompt = String::from("Enter Character");
+                self.input_mode = InputMode::Command;
+                self.command_type = CommandType::BefungeInput;
+            }
+        }
+    }
+
     pub fn do_loop(&mut self) {
         while !self.should_stop {
             self.draw();
             self.handle_events();
+
+            if self.autoplay {
+                self.do_step();
+            }
             // we don't need more than 30 fps
             thread::sleep(Duration::from_millis((1.0 / 30.0 * 1000.0) as u64));
         }
