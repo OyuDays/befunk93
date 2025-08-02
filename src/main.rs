@@ -181,7 +181,6 @@ fn main() {
                         .x
                         .wrapping_add(space_area.x)
                         .clamp(space_area.x, space_area.x + space_area.width),
-                    // still has some weird behaviour on right edge but thats a problem for future me :)
                     cursorpos
                         .y
                         .wrapping_add(space_area.y)
