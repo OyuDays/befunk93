@@ -3,6 +3,7 @@ use rand::Rng;
 
 // (hopefully) fully befunge93 compliant
 
+#[derive(Clone, Debug)]
 pub struct Position<T> {
     pub x: T,
     pub y: T,

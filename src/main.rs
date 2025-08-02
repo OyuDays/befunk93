@@ -1,7 +1,7 @@
 use crossterm::{
     ExecutableCommand,
-    event::{self, Event, KeyCode, KeyModifiers},
-    terminal::{self},
+    event::{self, Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind},
+    terminal,
 };
 use ratatui::{
     Frame, Terminal,
@@ -22,7 +22,10 @@ fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
     // double check
     stdout()
         .execute(terminal::LeaveAlternateScreen)
-        .expect("failed to leave alternate screen");
+        .expect("failed to leave alternate screen")
+        .execute(event::DisableMouseCapture)
+        .expect("failed to disable mouse capture");
+
     terminal::disable_raw_mode().expect("failed to disable raw mode");
 
     eprintln!("backtrace:\n{}", backtrace);
@@ -126,10 +129,13 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
     frame.render_widget(commands, inner_layout[2]);
 }
 
+// TODO: this code is a fucking mess
+// split it up into a struct
 fn main() {
     let mut cursorpos: Position<u16> = Position::new(0, 0);
     let mut posdirection: Direction = Direction::Right;
     let mut state: FungedState = FungedState::new();
+    let camera_offset: Position<u16> = Position::new(0, 0);
 
     let mut input_mode = InputMode::Normal;
     let mut command_type = CommandType::Command;
@@ -145,10 +151,13 @@ fn main() {
 
     stdout()
         .execute(terminal::EnterAlternateScreen)
-        .expect("failed to enter alternate screen");
+        .expect("failed to enter alternate screen")
+        .execute(event::EnableMouseCapture)
+        .expect("failed to enable mouse capture");
 
     'top: loop {
         //terminal.clear().expect("failed to clear screen");
+        let mut space_area: Rect = Default::default();
         terminal
             .draw(|frame| {
                 let size = frame.area();
@@ -162,27 +171,28 @@ fn main() {
                     .split(layout[1]);
 
                 frame.area();
-                draw_space(frame, &state, right_layout[0], Position::new(0, 0));
+                space_area = right_layout[0];
+                draw_space(frame, &state, right_layout[0], camera_offset.clone());
                 draw_commandbar(frame, right_layout[1], command_prompt, &command);
                 draw_sidebar(frame, &state, layout[0]);
 
                 frame.set_cursor_position(layout::Position::new(
                     cursorpos
                         .x
-                        .wrapping_add(layout[1].x)
-                        .clamp(layout[1].x, layout[1].width),
+                        .wrapping_add(space_area.x)
+                        .clamp(space_area.x, space_area.width),
                     // still has some weird behaviour on right edge but thats a problem for future me :)
                     cursorpos
                         .y
-                        .wrapping_add(layout[1].y)
-                        .clamp(layout[1].y, layout[1].height),
+                        .wrapping_add(space_area.y)
+                        .clamp(space_area.y, space_area.height),
                 ));
             })
             .expect("failed to draw frame");
 
         while event::poll(Duration::ZERO).unwrap() {
-            if let Event::Key(key) = event::read().expect("failed to read events") {
-                match input_mode {
+            match event::read().expect("failed to read events") {
+                Event::Key(key) => match input_mode {
                     InputMode::Command => {
                         if let KeyModifiers::NONE | KeyModifiers::SHIFT = key.modifiers {
                             match key.code {
@@ -203,7 +213,7 @@ fn main() {
                                 }
                                 KeyCode::Backspace => {
                                     command.pop();
-                                },
+                                }
                                 _ => (),
                             }
                         }
@@ -285,7 +295,20 @@ fn main() {
                         },
                         _ => (),
                     },
+                },
+                Event::Mouse(event) => {
+                    if let MouseEventKind::Down(MouseButton::Left) = event.kind {
+                        if event.column < space_area.x + space_area.width
+                            && event.column >= space_area.x
+                            && event.row < space_area.y + space_area.height
+                            && event.row >= space_area.y
+                        {
+                            cursorpos.x = event.column - space_area.x + camera_offset.x;
+                            cursorpos.y = event.row - space_area.y + camera_offset.y;
+                        }
+                    }
                 }
+                _ => (),
             }
         }
 
@@ -297,7 +320,9 @@ fn main() {
     // double check
     stdout()
         .execute(terminal::LeaveAlternateScreen)
-        .expect("failed to leave alternate screen");
+        .expect("failed to leave alternate screen")
+        .execute(event::DisableMouseCapture)
+        .expect("failed to disable mouse capture");
     terminal::disable_raw_mode().expect("failed to disable raw mode");
 }
 
