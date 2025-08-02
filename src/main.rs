@@ -1,6 +1,8 @@
 use crossterm::{
     ExecutableCommand,
-    event::{self, Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind},
+    event::{
+        self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    },
     terminal,
 };
 use ratatui::{
@@ -11,22 +13,18 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, Borders, List, Padding, Paragraph, Wrap},
 };
-use std::{io::stdout, thread, time::Duration};
+use std::{
+    io::{Stdout, stdout},
+    thread,
+    time::Duration,
+};
 mod befunge;
 use befunge::*;
 
 fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
     let backtrace = std::backtrace::Backtrace::capture();
-    ratatui::restore();
 
-    // double check
-    stdout()
-        .execute(terminal::LeaveAlternateScreen)
-        .expect("failed to leave alternate screen")
-        .execute(event::DisableMouseCapture)
-        .expect("failed to disable mouse capture");
-
-    terminal::disable_raw_mode().expect("failed to disable raw mode");
+    setdown();
 
     eprintln!("backtrace:\n{}", backtrace);
     eprintln!("{}", info);
@@ -131,34 +129,58 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
 
 // TODO: this code is a fucking mess
 // split it up into a struct
-fn main() {
-    let mut cursorpos: Position<u16> = Position::new(0, 0);
-    let mut posdirection: Direction = Direction::Right;
-    let mut state: FungedState = FungedState::new();
-    let camera_offset: Position<u16> = Position::new(0, 0);
 
-    let mut input_mode = InputMode::Normal;
-    let mut command_type = CommandType::Command;
+struct App {
+    pub cursorpos: Position<u16>,
+    pub posdirection: Direction,
+    pub state: FungedState,
+    pub camera_offset: Position<u16>,
+    pub space_area: Rect,
 
-    let mut terminal =
-        Terminal::new(CrosstermBackend::new(stdout())).expect("failed to get ratatui terminal");
+    pub input_mode: InputMode,
+    pub command_type: CommandType,
 
-    let mut command_prompt = "";
-    let mut command = String::new();
+    pub terminal: Terminal<CrosstermBackend<Stdout>>,
 
-    terminal::enable_raw_mode().expect("failed to enable raw mode");
-    std::panic::set_hook(Box::new(panic_hook));
+    pub command_prompt: String,
+    pub command: String,
 
-    stdout()
-        .execute(terminal::EnterAlternateScreen)
-        .expect("failed to enter alternate screen")
-        .execute(event::EnableMouseCapture)
-        .expect("failed to enable mouse capture");
+    pub should_stop: bool,
+}
 
-    'top: loop {
-        //terminal.clear().expect("failed to clear screen");
-        let mut space_area: Rect = Default::default();
-        terminal
+impl App {
+    pub fn new() -> Self {
+        terminal::enable_raw_mode().expect("failed to enable raw mode");
+        std::panic::set_hook(Box::new(panic_hook));
+
+        stdout()
+            .execute(terminal::EnterAlternateScreen)
+            .expect("failed to enter alternate screen")
+            .execute(event::EnableMouseCapture)
+            .expect("failed to enable mouse capture");
+
+        App {
+            cursorpos: Position::new(0, 0),
+            posdirection: Direction::Right,
+            state: FungedState::new(),
+            camera_offset: Position::new(0, 0),
+            space_area: Rect::default(),
+
+            input_mode: InputMode::Normal,
+            command_type: CommandType::Command,
+
+            terminal: Terminal::new(CrosstermBackend::new(stdout()))
+                .expect("failed to get ratatui terminal"),
+
+            command_prompt: String::new(),
+            command: String::new(),
+
+            should_stop: false,
+        }
+    }
+
+    fn draw(&mut self) {
+        self.terminal
             .draw(|frame| {
                 let size = frame.area();
                 let layout = Layout::default()
@@ -171,158 +193,192 @@ fn main() {
                     .split(layout[1]);
 
                 frame.area();
-                space_area = right_layout[0];
-                draw_space(frame, &state, right_layout[0], camera_offset.clone());
-                draw_commandbar(frame, right_layout[1], command_prompt, &command);
-                draw_sidebar(frame, &state, layout[0]);
+                self.space_area = right_layout[0];
+                draw_space(
+                    frame,
+                    &self.state,
+                    right_layout[0],
+                    self.camera_offset.clone(),
+                );
+                draw_commandbar(frame, right_layout[1], &self.command_prompt, &self.command);
+                draw_sidebar(frame, &self.state, layout[0]);
 
                 frame.set_cursor_position(layout::Position::new(
-                    cursorpos
+                    self.cursorpos
                         .x
-                        .wrapping_add(space_area.x)
-                        .clamp(space_area.x, space_area.x + space_area.width),
-                    cursorpos
-                        .y
-                        .wrapping_add(space_area.y)
-                        .clamp(space_area.y, space_area.y + space_area.height),
+                        .wrapping_add(self.space_area.x)
+                        .clamp(self.space_area.x, self.space_area.x + self.space_area.width),
+                    self.cursorpos.y.wrapping_add(self.space_area.y).clamp(
+                        self.space_area.y,
+                        self.space_area.y + self.space_area.height,
+                    ),
                 ));
             })
             .expect("failed to draw frame");
+    }
 
-        while event::poll(Duration::ZERO).unwrap() {
-            match event::read().expect("failed to read events") {
-                Event::Key(key) => match input_mode {
-                    InputMode::Command => {
-                        if let KeyModifiers::NONE | KeyModifiers::SHIFT = key.modifiers {
-                            match key.code {
-                                KeyCode::Char(char) => command.push(char),
-                                KeyCode::Esc => {
-                                    command.clear();
-                                    command_prompt = "";
-                                    input_mode = InputMode::Normal;
-                                }
-                                KeyCode::Enter => {
-                                    match command_type {
-                                        CommandType::BefungeInput => state.input = command,
-                                        CommandType::Command => todo!(),
-                                    }
-                                    command = String::new();
-                                    command_prompt = "";
-                                    input_mode = InputMode::Normal;
-                                }
-                                KeyCode::Backspace => {
-                                    command.pop();
-                                }
-                                _ => (),
-                            }
-                        }
+    fn handle_command_inputmode(&mut self, key: KeyEvent) {
+        if let KeyModifiers::NONE | KeyModifiers::SHIFT = key.modifiers {
+            match key.code {
+                KeyCode::Char(char) => self.command.push(char),
+                KeyCode::Esc => {
+                    self.command = String::new();
+                    self.command_prompt = String::new();
+                    self.input_mode = InputMode::Normal;
+                }
+                KeyCode::Enter => {
+                    match self.command_type {
+                        CommandType::BefungeInput => self.state.input = self.command.clone(),
+                        CommandType::Command => todo!(),
                     }
-                    InputMode::Normal => match key.modifiers {
-                        KeyModifiers::CONTROL => {
-                            if let KeyCode::Char(key) = key.code {
-                                match key {
-                                    'c' => break 'top,
-                                    's' => {
-                                        // TODO: handle input
-
-                                        match state.do_step() {
-                                            NeedsInputType::None => (),
-                                            NeedsInputType::Decimal => {
-                                                command_prompt = "Enter Decimal";
-                                                input_mode = InputMode::Command;
-                                                command_type = CommandType::BefungeInput;
-                                            }
-                                            NeedsInputType::Character => {
-                                                command_prompt = "Enter Character";
-                                                input_mode = InputMode::Command;
-                                                command_type = CommandType::BefungeInput;
-                                            }
-                                        }
-                                    }
-                                    'r' => state.restart(),
-
-                                    _ => (),
-                                }
-                            }
-                        }
-                        KeyModifiers::NONE | KeyModifiers::SHIFT => match key.code {
-                            // opposite direction
-                            KeyCode::Backspace => match posdirection {
-                                Direction::Up => cursorpos.y = cursorpos.y.wrapping_add(1),
-                                Direction::Down => cursorpos.y = cursorpos.y.wrapping_sub(1),
-                                Direction::Left => cursorpos.x = cursorpos.x.wrapping_add(1),
-                                Direction::Right => cursorpos.x = cursorpos.x.wrapping_sub(1),
-                            },
-
-                            KeyCode::Char(char) => {
-                                state.setc(cursorpos.x, cursorpos.y, char);
-                                // switch direction on direction items
-                                match char {
-                                    '^' => posdirection = Direction::Up,
-                                    'v' => posdirection = Direction::Down,
-                                    '<' => posdirection = Direction::Left,
-                                    '>' => posdirection = Direction::Right,
-                                    _ => (),
-                                }
-
-                                match posdirection {
-                                    Direction::Up => cursorpos.y = cursorpos.y.wrapping_sub(1),
-                                    Direction::Down => cursorpos.y = cursorpos.y.wrapping_add(1),
-                                    Direction::Left => cursorpos.x = cursorpos.x.wrapping_sub(1),
-                                    Direction::Right => cursorpos.x = cursorpos.x.wrapping_add(1),
-                                }
-                            }
-
-                            KeyCode::Up => {
-                                cursorpos.y = cursorpos.y.wrapping_sub(1);
-                                posdirection = Direction::Up;
-                            }
-                            KeyCode::Down => {
-                                cursorpos.y = cursorpos.y.wrapping_add(1);
-                                posdirection = Direction::Down;
-                            }
-                            KeyCode::Left => {
-                                cursorpos.x = cursorpos.x.wrapping_sub(1);
-                                posdirection = Direction::Left;
-                            }
-                            KeyCode::Right => {
-                                cursorpos.x = cursorpos.x.wrapping_add(1);
-                                posdirection = Direction::Right;
-                            }
-
-                            _ => (),
-                        },
-                        _ => (),
-                    },
-                },
-                Event::Mouse(event) => {
-                    if let MouseEventKind::Down(MouseButton::Left) = event.kind {
-                        if event.column < space_area.x + space_area.width
-                            && event.column >= space_area.x
-                            && event.row < space_area.y + space_area.height
-                            && event.row >= space_area.y
-                        {
-                            cursorpos.x = event.column - space_area.x + camera_offset.x;
-                            cursorpos.y = event.row - space_area.y + camera_offset.y;
-                        }
-                    }
+                    self.command = String::new();
+                    self.command_prompt = String::new();
+                    self.input_mode = InputMode::Normal;
+                }
+                KeyCode::Backspace => {
+                    self.command.pop();
                 }
                 _ => (),
             }
         }
-
-        // we don't need more than 30 fps
-        thread::sleep(Duration::from_millis((1.0 / 30.0 * 1000.0) as u64));
     }
+
+    fn handle_control_keys(&mut self, key: char) {
+        match key {
+            'c' => self.should_stop = true,
+            's' => match self.state.do_step() {
+                NeedsInputType::None => (),
+                NeedsInputType::Decimal => {
+                    self.command_prompt = String::from("Enter Decimal");
+                    self.input_mode = InputMode::Command;
+                    self.command_type = CommandType::BefungeInput;
+                }
+                NeedsInputType::Character => {
+                    self.command_prompt = String::from("Enter Character");
+                    self.input_mode = InputMode::Command;
+                    self.command_type = CommandType::BefungeInput;
+                }
+            },
+            'r' => self.state.restart(),
+
+            _ => (),
+        }
+    }
+
+    fn handle_normal_inputmode(&mut self, key: KeyEvent) {
+        match key.modifiers {
+            KeyModifiers::CONTROL => {
+                if let KeyCode::Char(key) = key.code {
+                    self.handle_control_keys(key)
+                }
+            }
+
+            KeyModifiers::NONE | KeyModifiers::SHIFT => match key.code {
+                // opposite direction
+                KeyCode::Backspace => match self.posdirection {
+                    Direction::Up => self.cursorpos.y = self.cursorpos.y.wrapping_add(1),
+                    Direction::Down => self.cursorpos.y = self.cursorpos.y.wrapping_sub(1),
+                    Direction::Left => self.cursorpos.x = self.cursorpos.x.wrapping_add(1),
+                    Direction::Right => self.cursorpos.x = self.cursorpos.x.wrapping_sub(1),
+                },
+
+                KeyCode::Char(char) => {
+                    self.state.setc(self.cursorpos.x, self.cursorpos.y, char);
+                    // switch direction on direction items
+                    match char {
+                        '^' => self.posdirection = Direction::Up,
+                        'v' => self.posdirection = Direction::Down,
+                        '<' => self.posdirection = Direction::Left,
+                        '>' => self.posdirection = Direction::Right,
+                        _ => (),
+                    }
+
+                    match self.posdirection {
+                        Direction::Up => self.cursorpos.y = self.cursorpos.y.wrapping_sub(1),
+                        Direction::Down => self.cursorpos.y = self.cursorpos.y.wrapping_add(1),
+                        Direction::Left => self.cursorpos.x = self.cursorpos.x.wrapping_sub(1),
+                        Direction::Right => self.cursorpos.x = self.cursorpos.x.wrapping_add(1),
+                    }
+                }
+
+                KeyCode::Up => {
+                    self.cursorpos.y = self.cursorpos.y.wrapping_sub(1);
+                    self.posdirection = Direction::Up;
+                }
+                KeyCode::Down => {
+                    self.cursorpos.y = self.cursorpos.y.wrapping_add(1);
+                    self.posdirection = Direction::Down;
+                }
+                KeyCode::Left => {
+                    self.cursorpos.x = self.cursorpos.x.wrapping_sub(1);
+                    self.posdirection = Direction::Left;
+                }
+                KeyCode::Right => {
+                    self.cursorpos.x = self.cursorpos.x.wrapping_add(1);
+                    self.posdirection = Direction::Right;
+                }
+
+                _ => (),
+            },
+            _ => (),
+        }
+    }
+
+    fn handle_mouse_event(&mut self, event: MouseEvent) {
+        if let MouseEventKind::Down(MouseButton::Left) = event.kind {
+            if event.column < self.space_area.x + self.space_area.width
+                && event.column >= self.space_area.x
+                && event.row < self.space_area.y + self.space_area.height
+                && event.row >= self.space_area.y
+            {
+                self.cursorpos.x = event.column - self.space_area.x + self.camera_offset.x;
+                self.cursorpos.y = event.row - self.space_area.y + self.camera_offset.y;
+            }
+        }
+    }
+
+    fn handle_events(&mut self) {
+        while event::poll(Duration::ZERO).unwrap() {
+            match event::read().expect("failed to read events") {
+                Event::Key(key) => match self.input_mode {
+                    InputMode::Command => self.handle_command_inputmode(key),
+
+                    InputMode::Normal => self.handle_normal_inputmode(key),
+                },
+                Event::Mouse(event) => self.handle_mouse_event(event),
+                _ => (),
+            }
+        }
+    }
+
+    pub fn do_loop(&mut self) {
+        while !self.should_stop {
+            self.draw();
+            self.handle_events();
+            // we don't need more than 30 fps
+            thread::sleep(Duration::from_millis((1.0 / 30.0 * 1000.0) as u64));
+        }
+    }
+}
+
+pub fn setdown() {
     ratatui::restore();
 
-    // double check
+    // restore sucks at its job so i gotta do it myself
     stdout()
         .execute(terminal::LeaveAlternateScreen)
         .expect("failed to leave alternate screen")
         .execute(event::DisableMouseCapture)
         .expect("failed to disable mouse capture");
     terminal::disable_raw_mode().expect("failed to disable raw mode");
+}
+
+fn main() {
+    let mut app = App::new();
+
+    app.do_loop();
+
+    setdown();
 }
 
 enum InputMode {
