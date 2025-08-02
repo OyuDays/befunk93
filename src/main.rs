@@ -212,6 +212,9 @@ impl App {
         self.terminal
             .draw(|frame| {
                 let size = frame.area();
+                self.camera_offset.x = self.cursorpos.x.saturating_sub(size.width/2).clamp(0, u16::MAX - size.width);
+                self.camera_offset.y = self.cursorpos.y.saturating_sub(size.height/2).clamp(0, u16::MAX - size.height);
+
                 let layout = Layout::default()
                     .direction(layout::Direction::Horizontal)
                     .constraints([Constraint::Length(12), Constraint::Min(20)])
@@ -233,11 +236,14 @@ impl App {
                 draw_sidebar(frame, &self.state, layout[0]);
 
                 frame.set_cursor_position(layout::Position::new(
-                    self.cursorpos
-                        .x
+                        (self.cursorpos
+                        .x - self.camera_offset.x)
                         .wrapping_add(self.space_area.x)
                         .clamp(self.space_area.x, self.space_area.x + self.space_area.width),
-                    self.cursorpos.y.wrapping_add(self.space_area.y).clamp(
+                        (self.cursorpos.
+                         y - self.camera_offset.y)
+                         .wrapping_add(self.space_area.y)
+                         .clamp(
                         self.space_area.y,
                         self.space_area.y + self.space_area.height,
                     ),
