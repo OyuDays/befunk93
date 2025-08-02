@@ -9,12 +9,15 @@ use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
     layout::{self, Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, List, Padding, Paragraph, Wrap},
 };
 use std::{
-    fs::File, io::{stdout, Read, Stdout, Write}, thread, time::Duration
+    fs::File,
+    io::{Read, Stdout, Write, stdout},
+    thread,
+    time::Duration,
 };
 mod befunge;
 use befunge::*;
@@ -28,19 +31,28 @@ fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
     eprintln!("{}", info);
 }
 
-fn draw_space(frame: &mut Frame, state: &FungedState, area: Rect, offset: Position<u16>) {
+fn draw_space(
+    frame: &mut Frame,
+    state: &FungedState,
+    area: Rect,
+    offset: Position<u16>,
+    cursorpos: Position<u16>,
+) {
     let mut text = Text::default();
-    for y in offset.y..offset.y + area.height {
+    for y in offset.y + 1..offset.y + 1 + area.height {
         let mut line = Line::default();
         for x in offset.x..offset.x + area.width {
             let mut span = Span::default();
 
             let char = char::from_u32(state.get(x, y).try_into().unwrap_or(0)).unwrap_or('�');
             span = span.content(char.to_string());
-            span = if x == state.position.x && y == state.position.y {
-                span.style(Style::default().fg(Color::Black).bg(Color::Blue))
+            if x == state.position.x && y == state.position.y {
+                span = span.style(Style::default().fg(Color::Black).bg(Color::Blue));
             } else {
-                span.style(Style::default().fg(Color::White))
+                span = span.style(Style::default().fg(Color::White));
+                if x == cursorpos.x && y == cursorpos.y {
+                    span = span.patch_style(Style::default().add_modifier(Modifier::REVERSED));
+                }
             };
 
             if char.is_control() || char.is_whitespace() {
@@ -212,8 +224,6 @@ impl App {
         self.terminal
             .draw(|frame| {
                 let size = frame.area();
-                self.camera_offset.x = self.cursorpos.x.saturating_sub(size.width/2).clamp(0, u16::MAX - size.width);
-                self.camera_offset.y = self.cursorpos.y.saturating_sub(size.height/2).clamp(0, u16::MAX - size.height);
 
                 let layout = Layout::default()
                     .direction(layout::Direction::Horizontal)
@@ -226,28 +236,41 @@ impl App {
 
                 frame.area();
                 self.space_area = right_layout[0];
+
+                self.camera_offset.x = self
+                    .cursorpos
+                    .x
+                    .saturating_sub(self.space_area.width / 2)
+                    .clamp(0, u16::MAX - self.space_area.width);
+                self.camera_offset.y = self
+                    .cursorpos
+                    .y
+                    .saturating_sub(self.space_area.height / 2)
+                    .clamp(0, u16::MAX - self.space_area.height);
+
                 draw_space(
                     frame,
                     &self.state,
                     right_layout[0],
                     self.camera_offset.clone(),
+                    self.cursorpos.clone(),
                 );
                 draw_commandbar(frame, right_layout[1], &self.command_prompt, &self.command);
                 draw_sidebar(frame, &self.state, layout[0]);
 
-                frame.set_cursor_position(layout::Position::new(
-                        (self.cursorpos
-                        .x - self.camera_offset.x)
-                        .wrapping_add(self.space_area.x)
-                        .clamp(self.space_area.x, self.space_area.x + self.space_area.width),
-                        (self.cursorpos.
-                         y - self.camera_offset.y)
-                         .wrapping_add(self.space_area.y)
-                         .clamp(
-                        self.space_area.y,
-                        self.space_area.y + self.space_area.height,
-                    ),
-                ));
+                //                frame.set_cursor_position(layout::Position::new(
+                //                        (self.cursorpos
+                //                        .x - self.camera_offset.x)
+                //                        .wrapping_add(self.space_area.x)
+                //                        .clamp(self.space_area.x, self.space_area.x + self.space_area.width),
+                //                        (self.cursorpos.
+                //                         y - self.camera_offset.y)
+                //                         .wrapping_add(self.space_area.y)
+                //                         .clamp(
+                //                        self.space_area.y,
+                //                        self.space_area.y + self.space_area.height,
+                //                    ),
+                //                ));
             })
             .expect("failed to draw frame");
     }
@@ -266,15 +289,13 @@ impl App {
                         CommandType::BefungeInput => {
                             self.state.input = self.command.clone();
                             self.command = String::new();
-                        },
+                        }
 
-                        CommandType::OpenFile => {
-                            match self.get_file(&self.command.clone()) {
-                                Err(err) => self.command = err.to_string(),
-                                Ok(string) => {
-                                    self.state = FungedState::new();
-                                    self.state.map_from_string(&string);
-                                },
+                        CommandType::OpenFile => match self.get_file(&self.command.clone()) {
+                            Err(err) => self.command = err.to_string(),
+                            Ok(string) => {
+                                self.state = FungedState::new();
+                                self.state.map_from_string(&string);
                             }
                         },
                         CommandType::WriteFile => {
@@ -308,13 +329,13 @@ impl App {
                 self.command.clear();
                 self.input_mode = InputMode::Command;
                 self.command_type = CommandType::OpenFile;
-            },
+            }
             'w' => {
                 self.command_prompt = String::from("Write file");
                 self.command.clear();
                 self.input_mode = InputMode::Command;
                 self.command_type = CommandType::WriteFile;
-            },
+            }
 
             _ => (),
         }

@@ -71,7 +71,7 @@ impl FungedState {
             }
         }
     }
-    
+
     // referenced from https://github.com/PartyWumpus/befunge-editor/blob/main/src/befunge.rs#L152
     // (thanks a ton, partywumpus)
     pub fn map_to_string(&mut self) -> String {
@@ -82,8 +82,11 @@ impl FungedState {
             }
         }
 
-        let mut lines: Vec<Vec<char>> = vec![vec![]; height+1];
-        let entries = self.map.keys().map(|(x,y)| { ((*x,*y), *self.map.get(&(*x, *y)).unwrap()) });
+        let mut lines: Vec<Vec<char>> = vec![vec![]; height + 1];
+        let entries = self
+            .map
+            .keys()
+            .map(|(x, y)| ((*x, *y), *self.map.get(&(*x, *y)).unwrap()));
 
         for ((x, y), v) in entries {
             let line = &mut lines[y as usize];
@@ -93,7 +96,8 @@ impl FungedState {
                 assert_ne!(v, '\r' as i64);
                 line.push(char::from_u32(v as u32).expect("failed to turn map into string"));
             } else {
-                line[x as usize] = char::from_u32(v as u32).expect("failed to turn map into string");
+                line[x as usize] =
+                    char::from_u32(v as u32).expect("failed to turn map into string");
             }
         }
 
@@ -106,8 +110,10 @@ impl FungedState {
     }
 
     pub fn get(&self, x: u16, y: u16) -> i64 {
-        *self.put_map.get(&(x, y)).unwrap_or(
-            self.map.get(&(x, y)).unwrap_or(&(b' ' as i64)))
+        *self
+            .put_map
+            .get(&(x, y))
+            .unwrap_or(self.map.get(&(x, y)).unwrap_or(&(b' ' as i64)))
     }
 
     pub fn set(&mut self, x: u16, y: u16, v: i64) {
@@ -141,7 +147,6 @@ impl FungedState {
             } else {
                 self.stack.push(character as i64)
             }
-
         } else {
             let op: u8 = self
                 .get(self.position.x, self.position.y)
@@ -268,14 +273,23 @@ impl FungedState {
                     let v = self.stack.pop().unwrap_or(0);
 
                     // dont worry, should never panic (aslong as clamp works)
-                    self.put_map.insert((x.clamp(0, u16::MAX.into()).try_into().unwrap(), y.clamp(0, u16::MAX.into()).try_into().unwrap()), v);
+                    self.put_map.insert(
+                        (
+                            x.clamp(0, u16::MAX.into()).try_into().unwrap(),
+                            y.clamp(0, u16::MAX.into()).try_into().unwrap(),
+                        ),
+                        v,
+                    );
                 }
                 // get (pop y,x and push value at x,y)
                 b'g' => {
                     let y = self.stack.pop().unwrap_or(0);
                     let x = self.stack.pop().unwrap_or(0);
 
-                    self.stack.push(self.get(x.clamp(0, u16::MAX.into()).try_into().unwrap(), y.clamp(0, u16::MAX.into()).try_into().unwrap()));
+                    self.stack.push(self.get(
+                        x.clamp(0, u16::MAX.into()).try_into().unwrap(),
+                        y.clamp(0, u16::MAX.into()).try_into().unwrap(),
+                    ));
                 }
 
                 // Output
@@ -298,19 +312,20 @@ impl FungedState {
                 // get decimal
                 b'&' => {
                     if self.input.is_empty() {
-                        return NeedsInputType::Decimal
+                        return NeedsInputType::Decimal;
                     }
                     self.stack.push(self.input.parse().unwrap_or(0));
                     self.input.clear();
-                },
+                }
                 // get character
                 b'~' => {
                     if self.input.is_empty() {
-                        return NeedsInputType::Character
+                        return NeedsInputType::Character;
                     }
-                    self.stack.push(self.input.chars().next().unwrap_or(0 as char) as i64);
+                    self.stack
+                        .push(self.input.chars().next().unwrap_or(0 as char) as i64);
                     self.input.clear();
-                },
+                }
 
                 // String mode
                 b'"' => self.is_string_mode = true,
@@ -371,7 +386,8 @@ mod tests {
 
         state.map_from_string(
             "v \n\
-             >0123456789");
+             >0123456789",
+        );
 
         do_n_steps(&mut state, 12);
 
@@ -390,12 +406,13 @@ mod tests {
         //|0_0|
         //1   3
         state.map_from_string(
-               "  v  \n\
+            "  v  \n\
                 @   @\n\
                 2 1 4\n\
                 |0_0|\n\
                 1   3\n\
-                @   @");
+                @   @",
+        );
 
         run_until_completion(&mut state);
         assert_eq!(state.stack, vec![1]);
@@ -465,7 +482,7 @@ mod tests {
     #[test]
     fn print_string() {
         let mut state = FungedState::new();
- 
+
         state.map_from_string("\"v,8g\\\",,,,,@");
 
         run_until_completion(&mut state);
@@ -506,8 +523,6 @@ mod tests {
         assert_eq!(state.input, String::new());
         state.input = String::from("571");
         run_until_completion(&mut state);
-
-
     }
 
     #[test]
