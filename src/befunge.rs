@@ -167,22 +167,22 @@ impl FungedState {
                 b'+' => {
                     let a = self.stack.pop().unwrap_or(0);
                     let b = self.stack.pop().unwrap_or(0);
-                    self.stack.push(a + b);
+                    self.stack.push(a.wrapping_add(b));
                 }
                 b'-' => {
                     let a = self.stack.pop().unwrap_or(0);
                     let b = self.stack.pop().unwrap_or(0);
-                    self.stack.push(b - a);
+                    self.stack.push(b.wrapping_sub(a));
                 }
                 b'*' => {
                     let a = self.stack.pop().unwrap_or(0);
                     let b = self.stack.pop().unwrap_or(0);
-                    self.stack.push(a * b);
+                    self.stack.push(a.wrapping_mul(b));
                 }
                 b'/' => {
                     let a = self.stack.pop().unwrap_or(0);
                     let b = self.stack.pop().unwrap_or(0);
-                    self.stack.push(b / a);
+                    self.stack.push(b.wrapping_div(a));
                 }
                 b'%' => {
                     let a = self.stack.pop().unwrap_or(0);
@@ -528,6 +528,7 @@ mod tests {
     #[test]
     fn wrapping() {
         let mut state = FungedState::new();
+
         state.setc(0, 0, '^');
         state.setc(0, u16::MAX, '<');
         state.setc(u16::MAX, u16::MAX, 'v');
@@ -545,5 +546,16 @@ mod tests {
         state.do_step();
         assert_eq!(state.position.x, 0);
         assert_eq!(state.position.y, 0);
+    }
+
+    // this test is solely to make sure it doesnt crash
+    #[test]
+    fn wrapping_stack() {
+        let mut state = FungedState::new();
+        
+        state.stack.push(i64::MAX);
+        state.map_from_string("1+1-2*@");
+
+        run_until_completion(&mut state);
     }
 }
