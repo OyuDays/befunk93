@@ -28,12 +28,12 @@ impl<T> Position<T> {
 }
 
 pub struct FungedState {
-    pub map: HashMap<(u64, u64), u64>,
-    pub put_map: HashMap<(u64, u64), u64>,
+    pub map: HashMap<(u16, u16), i64>,
+    pub put_map: HashMap<(u16, u16), i64>,
     pub is_string_mode: bool,
-    pub position: Position<u64>,
+    pub position: Position<u16>,
     pub direction: Direction,
-    pub stack: Vec<u64>,
+    pub stack: Vec<i64>,
     pub output: String,
     pub input: String,
     pub is_running: bool,
@@ -64,12 +64,12 @@ impl FungedState {
     pub fn map_from_string(&mut self, string: &str) {
         for (r, line) in string.lines().enumerate() {
             for (c, character) in line.chars().enumerate() {
-                self.setc(c as u64, r as u64, character);
+                self.setc(c as u16, r as u16, character);
             }
         }
     }
 
-    pub fn print(&mut self, width: u64, height: u64) {
+    pub fn print(&mut self, width: u16, height: u16) {
         for y in 0..height {
             for x in 0..width {
                 print!("{}", char::from_u32(self.get(x, y)
@@ -81,17 +81,17 @@ impl FungedState {
         }
     }
 
-    pub fn get(&self, x: u64, y: u64) -> u64 {
+    pub fn get(&self, x: u16, y: u16) -> i64 {
         *self.put_map.get(&(x, y)).unwrap_or(
-            self.map.get(&(x, y)).unwrap_or(&(b' ' as u64)))
+            self.map.get(&(x, y)).unwrap_or(&(b' ' as i64)))
     }
 
-    pub fn set(&mut self, x: u64, y: u64, v: u64) {
+    pub fn set(&mut self, x: u16, y: u16, v: i64) {
         self.map.insert((x, y), v);
     }
 
-    pub fn setc(&mut self, x: u64, y: u64, v: char) {
-        self.map.insert((x, y), v as u64);
+    pub fn setc(&mut self, x: u16, y: u16, v: char) {
+        self.map.insert((x, y), v as i64);
     }
 
     pub fn restart(&mut self) {
@@ -115,7 +115,7 @@ impl FungedState {
             if character == b'"' as u32 {
                 self.is_string_mode = false
             } else {
-                self.stack.push(character as u64)
+                self.stack.push(character as i64)
             }
 
         } else {
@@ -243,14 +243,15 @@ impl FungedState {
                     let x = self.stack.pop().unwrap_or(0);
                     let v = self.stack.pop().unwrap_or(0);
 
-                    self.put_map.insert((x, y), v);
+                    // dont worry, should never panic (aslong as clamp works)
+                    self.put_map.insert((x.clamp(0, u16::MAX.into()).try_into().unwrap(), y.clamp(0, u16::MAX.into()).try_into().unwrap()), v);
                 }
                 // get (pop y,x and push value at x,y)
                 b'g' => {
                     let y = self.stack.pop().unwrap_or(0);
                     let x = self.stack.pop().unwrap_or(0);
 
-                    self.stack.push(self.get(x, y));
+                    self.stack.push(self.get(x.clamp(0, u16::MAX.into()).try_into().unwrap(), y.clamp(0, u16::MAX.into()).try_into().unwrap()));
                 }
 
                 // Output
@@ -283,7 +284,7 @@ impl FungedState {
                     if self.input.is_empty() {
                         return NeedsInputType::Character
                     }
-                    self.stack.push(self.input.chars().next().unwrap_or(0 as char) as u64);
+                    self.stack.push(self.input.chars().next().unwrap_or(0 as char) as i64);
                     self.input.clear();
                 },
 
@@ -294,7 +295,7 @@ impl FungedState {
                 b'@' => self.is_running = false,
 
                 // Digits
-                b'0'..=b'9' => self.stack.push((op - b'0') as u64),
+                b'0'..=b'9' => self.stack.push((op - b'0') as i64),
 
                 _ => (),
             }
@@ -466,8 +467,8 @@ mod tests {
         state.map_from_string("\"r\"97p97g96g@");
 
         run_until_completion(&mut state);
-        assert_eq!(state.stack, vec![b'r' as u64, b' ' as u64]);
-        assert_eq!(state.get(9, 7), b'r' as u64);
+        assert_eq!(state.stack, vec![b'r' as i64, b' ' as i64]);
+        assert_eq!(state.get(9, 7), b'r' as i64);
     }
 
     #[test]
@@ -489,18 +490,18 @@ mod tests {
     fn wrapping() {
         let mut state = FungedState::new();
         state.setc(0, 0, '^');
-        state.setc(0, u64::MAX, '<');
-        state.setc(u64::MAX, u64::MAX, 'v');
-        state.setc(u64::MAX, 0, '>');
+        state.setc(0, u16::MAX, '<');
+        state.setc(u16::MAX, u16::MAX, 'v');
+        state.setc(u16::MAX, 0, '>');
 
         state.do_step();
         assert_eq!(state.position.x, 0);
-        assert_eq!(state.position.y, u64::MAX);
+        assert_eq!(state.position.y, u16::MAX);
         state.do_step();
-        assert_eq!(state.position.x, u64::MAX);
-        assert_eq!(state.position.y, u64::MAX);
+        assert_eq!(state.position.x, u16::MAX);
+        assert_eq!(state.position.y, u16::MAX);
         state.do_step();
-        assert_eq!(state.position.x, u64::MAX);
+        assert_eq!(state.position.x, u16::MAX);
         assert_eq!(state.position.y, 0);
         state.do_step();
         assert_eq!(state.position.x, 0);

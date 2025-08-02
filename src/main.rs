@@ -22,23 +22,23 @@ fn draw_space(frame: &mut Frame, state: &FungedState, area: Rect, offset: Positi
         for x in offset.x..offset.x + area.width {
             let mut span = Span::default();
 
-            let char = char::from_u32(state.get(x.into(), y.into()).try_into().unwrap_or(0))
+            let char = char::from_u32(state.get(x, y).try_into().unwrap_or(0))
                 .unwrap_or('�');
-            span = if char.is_control() || char.is_whitespace() {
-                if char == ' ' {
-                    span.content(" ")
-                } else {
-                    line.push_span(span.content("X").style(Style::default().fg(Color::Red)));
-                    break;
-                }
-            } else {
-                span.content(char.to_string())
-            };
-            span = if x as u64 == state.position.x && y as u64 == state.position.y {
+            span = span.content(char.to_string());
+            span = if x == state.position.x && y == state.position.y {
                 span.style(Style::default().fg(Color::Black).bg(Color::Blue))
             } else {
                 span.style(Style::default().fg(Color::White))
             };
+
+            if char.is_control() || char.is_whitespace() {
+                if char == ' ' {
+                    span = span.content(" ")
+                } else {
+                    span = span.content("X").patch_style(Style::default().fg(Color::Red))
+                }
+            }
+
             line.push_span(span);
         }
         text.push_line(line)
@@ -95,7 +95,7 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
 }
 
 fn main() {
-    let mut cursorpos: Position<u64> = Position::new(0, 0);
+    let mut cursorpos: Position<u16> = Position::new(0, 0);
     let mut posdirection: Direction = Direction::Right;
     let mut state: FungedState = FungedState::new();
     let mut terminal =
@@ -122,17 +122,13 @@ fn main() {
                 frame.set_cursor_position(layout::Position::new(
                     cursorpos
                         .x
-                        .wrapping_add(layout[1].x as u64)
-                        .clamp(layout[1].x.into(), layout[1].width.into())
-                        .try_into()
-                        .unwrap(), // still has some weird behaviour on right edge but thats a problem for
-                    // future me :)
+                        .wrapping_add(layout[1].x)
+                        .clamp(layout[1].x, layout[1].width),
+                     // still has some weird behaviour on right edge but thats a problem for future me :)
                     cursorpos
                         .y
-                        .wrapping_add(layout[1].y as u64)
-                        .clamp(layout[1].y.into(), layout[1].height.into())
-                        .try_into()
-                        .unwrap(),
+                        .wrapping_add(layout[1].y)
+                        .clamp(layout[1].y, layout[1].height),
                 ));
             })
             .expect("failed to draw frame");
