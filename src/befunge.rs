@@ -269,7 +269,6 @@ impl FungedState {
                 b'#' => self.step_forward(),
 
                 // Space manipulation
-                // TODO: make temporary and add rollback function or similar
                 // put (pop y,x,v, and put v at x,y)
                 b'p' => {
                     let y = self.stack.pop().unwrap_or(0);
