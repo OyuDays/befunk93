@@ -14,9 +14,10 @@ use ratatui::{
     widgets::{Block, Borders, List, Padding, Paragraph, Wrap},
 };
 use std::{
-    io::{Stdout, stdout},
+    io::{Stdout, stdout, Read},
     thread,
     time::Duration,
+    fs::File
 };
 mod befunge;
 use befunge::*;
@@ -107,6 +108,11 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
             Span::styled("^R", Style::new().blue()),
             Span::raw("estart"),
         ]),
+        // Open
+        Line::from(vec![
+            Span::styled("^O", Style::new().blue()),
+            Span::raw("pen"),
+        ]),
         // Cancel
         Line::from(vec![
             Span::styled("^C", Style::new().blue()),
@@ -131,9 +137,6 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
     frame.render_widget(output, inner_layout[1]);
     frame.render_widget(commands, inner_layout[2]);
 }
-
-// TODO: this code is a fucking mess
-// split it up into a struct
 
 struct App {
     pub cursorpos: Position<u16>,
@@ -188,13 +191,21 @@ impl App {
         }
     }
 
+    fn get_file(&mut self, filename: &str) -> std::io::Result<String> {
+        let mut file = File::open(filename)?;
+        let mut string = String::new();
+        file.read_to_string(&mut string)?;
+
+        Ok(string)
+    }
+
     fn draw(&mut self) {
         self.terminal
             .draw(|frame| {
                 let size = frame.area();
                 let layout = Layout::default()
                     .direction(layout::Direction::Horizontal)
-                    .constraints([Constraint::Length(10), Constraint::Min(20)])
+                    .constraints([Constraint::Length(12), Constraint::Min(20)])
                     .split(Rect::new(0, 0, size.width, size.height));
                 let right_layout = Layout::default()
                     .direction(layout::Direction::Vertical)
@@ -237,10 +248,23 @@ impl App {
                 }
                 KeyCode::Enter => {
                     match self.command_type {
-                        CommandType::BefungeInput => self.state.input = self.command.clone(),
+                        CommandType::BefungeInput => {
+                            self.state.input = self.command.clone();
+                            self.command = String::new();
+                        },
+
+                        CommandType::OpenFile => {
+                            match self.get_file(&self.command.clone()) {
+                                Err(err) => self.command = err.to_string(),
+                                Ok(string) => {
+                                    self.state = FungedState::new();
+                                    self.state.map_from_string(&string);
+                                },
+                            }
+                        },
+
                         CommandType::Command => todo!(),
                     }
-                    self.command = String::new();
                     self.command_prompt = String::new();
                     self.input_mode = InputMode::Normal;
                 }
@@ -258,6 +282,12 @@ impl App {
             's' => self.do_step(),
             'r' => self.state.restart(),
             'p' => self.autoplay = !self.autoplay,
+            'o' => {
+                self.command_prompt = String::from("Enter file");
+                self.command.clear();
+                self.input_mode = InputMode::Command;
+                self.command_type = CommandType::OpenFile;
+            }
 
             _ => (),
         }
@@ -354,11 +384,13 @@ impl App {
             NeedsInputType::None => (),
             NeedsInputType::Decimal => {
                 self.command_prompt = String::from("Enter Decimal");
+                self.command.clear();
                 self.input_mode = InputMode::Command;
                 self.command_type = CommandType::BefungeInput;
             }
             NeedsInputType::Character => {
                 self.command_prompt = String::from("Enter Character");
+                self.command.clear();
                 self.input_mode = InputMode::Command;
                 self.command_type = CommandType::BefungeInput;
             }
@@ -407,4 +439,5 @@ enum InputMode {
 enum CommandType {
     Command,
     BefungeInput,
+    OpenFile,
 }
