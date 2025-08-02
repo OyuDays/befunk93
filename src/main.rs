@@ -15,6 +15,20 @@ use std::{io::stdout, thread, time::Duration};
 mod befunge;
 use befunge::*;
 
+fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
+    let backtrace = std::backtrace::Backtrace::capture();
+    ratatui::restore();
+
+    // double check
+    stdout()
+        .execute(terminal::LeaveAlternateScreen)
+        .expect("failed to leave alternate screen");
+    terminal::disable_raw_mode().expect("failed to disable raw mode");
+
+    eprintln!("backtrace:\n{}", backtrace);
+    eprintln!("{}", info);
+}
+
 fn draw_space(frame: &mut Frame, state: &FungedState, area: Rect, offset: Position<u16>) {
     let mut text = Text::default();
     for y in offset.y..offset.y + area.height {
@@ -22,8 +36,7 @@ fn draw_space(frame: &mut Frame, state: &FungedState, area: Rect, offset: Positi
         for x in offset.x..offset.x + area.width {
             let mut span = Span::default();
 
-            let char = char::from_u32(state.get(x, y).try_into().unwrap_or(0))
-                .unwrap_or('�');
+            let char = char::from_u32(state.get(x, y).try_into().unwrap_or(0)).unwrap_or('�');
             span = span.content(char.to_string());
             span = if x == state.position.x && y == state.position.y {
                 span.style(Style::default().fg(Color::Black).bg(Color::Blue))
@@ -35,7 +48,9 @@ fn draw_space(frame: &mut Frame, state: &FungedState, area: Rect, offset: Positi
                 if char == ' ' {
                     span = span.content(" ")
                 } else {
-                    span = span.content("X").patch_style(Style::default().fg(Color::Red))
+                    span = span
+                        .content("X")
+                        .patch_style(Style::default().fg(Color::Red))
                 }
             }
 
@@ -44,6 +59,20 @@ fn draw_space(frame: &mut Frame, state: &FungedState, area: Rect, offset: Positi
         text.push_line(line)
     }
     frame.render_widget(text, area);
+}
+
+fn draw_commandbar(frame: &mut Frame, area: Rect, command_prompt: &str, command: &str) {
+    let block = Block::new()
+        .borders(Borders::NONE)
+        .padding(Padding::ZERO)
+        .bg(Color::Black);
+
+    let paragraph = Paragraph::new(command)
+        .block(block.title(command_prompt))
+        .style(Style::new().white())
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(paragraph, area);
 }
 
 fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
@@ -62,18 +91,21 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
         .wrap(Wrap { trim: false });
 
     let commands_vec = vec![
+        // Step
         Line::from(vec![
             Span::styled("^S", Style::new().blue()),
             Span::raw("tep"),
-        ]), // Step
-        Line::from(vec![
-            Span::styled("^C", Style::new().blue()),
-            Span::raw("ancel"),
-        ]), // Cancel
+        ]),
+        // Restart
         Line::from(vec![
             Span::styled("^R", Style::new().blue()),
             Span::raw("estart"),
-        ]), // Restart
+        ]),
+        // Cancel
+        Line::from(vec![
+            Span::styled("^C", Style::new().blue()),
+            Span::raw("ancel"),
+        ]),
     ];
 
     let commands = List::new(commands_vec.clone())
@@ -98,10 +130,19 @@ fn main() {
     let mut cursorpos: Position<u16> = Position::new(0, 0);
     let mut posdirection: Direction = Direction::Right;
     let mut state: FungedState = FungedState::new();
+
+    let mut input_mode = InputMode::Normal;
+    let mut command_type = CommandType::Command;
+
     let mut terminal =
         Terminal::new(CrosstermBackend::new(stdout())).expect("failed to get ratatui terminal");
 
+    let mut command_prompt = "";
+    let mut command = String::new();
+
     terminal::enable_raw_mode().expect("failed to enable raw mode");
+    std::panic::set_hook(Box::new(panic_hook));
+
     stdout()
         .execute(terminal::EnterAlternateScreen)
         .expect("failed to enter alternate screen");
@@ -115,8 +156,14 @@ fn main() {
                     .direction(layout::Direction::Horizontal)
                     .constraints([Constraint::Length(10), Constraint::Min(20)])
                     .split(Rect::new(0, 0, size.width, size.height));
+                let right_layout = Layout::default()
+                    .direction(layout::Direction::Vertical)
+                    .constraints([Constraint::Min(10), Constraint::Length(2)])
+                    .split(layout[1]);
+
                 frame.area();
-                draw_space(frame, &state, layout[1], Position::new(0, 0));
+                draw_space(frame, &state, right_layout[0], Position::new(0, 0));
+                draw_commandbar(frame, right_layout[1], command_prompt, &command);
                 draw_sidebar(frame, &state, layout[0]);
 
                 frame.set_cursor_position(layout::Position::new(
@@ -124,7 +171,7 @@ fn main() {
                         .x
                         .wrapping_add(layout[1].x)
                         .clamp(layout[1].x, layout[1].width),
-                     // still has some weird behaviour on right edge but thats a problem for future me :)
+                    // still has some weird behaviour on right edge but thats a problem for future me :)
                     cursorpos
                         .y
                         .wrapping_add(layout[1].y)
@@ -135,69 +182,109 @@ fn main() {
 
         while event::poll(Duration::ZERO).unwrap() {
             if let Event::Key(key) = event::read().expect("failed to read events") {
-                match key.modifiers {
-                    KeyModifiers::CONTROL => {
-                        if let KeyCode::Char(key) = key.code {
-                            match key {
-                                'c' => break 'top,
-                                's' => {
-                                    // TODO: handle input
-                                    let _ = state.do_step();
+                match input_mode {
+                    InputMode::Command => {
+                        if let KeyModifiers::NONE | KeyModifiers::SHIFT = key.modifiers {
+                            match key.code {
+                                KeyCode::Char(char) => command.push(char),
+                                KeyCode::Esc => {
+                                    command.clear();
+                                    command_prompt = "";
+                                    input_mode = InputMode::Normal;
                                 }
-                                'r' => state.restart(),
-
+                                KeyCode::Enter => {
+                                    match command_type {
+                                        CommandType::BefungeInput => state.input = command,
+                                        CommandType::Command => todo!(),
+                                    }
+                                    command = String::new();
+                                    command_prompt = "";
+                                    input_mode = InputMode::Normal;
+                                }
+                                KeyCode::Backspace => {
+                                    command.pop();
+                                },
                                 _ => (),
                             }
                         }
                     }
-                    KeyModifiers::NONE | KeyModifiers::SHIFT => match key.code {
-                        // opposite direction
-                        KeyCode::Backspace => match posdirection {
-                            Direction::Up => cursorpos.y = cursorpos.y.wrapping_add(1),
-                            Direction::Down => cursorpos.y = cursorpos.y.wrapping_sub(1),
-                            Direction::Left => cursorpos.x = cursorpos.x.wrapping_add(1),
-                            Direction::Right => cursorpos.x = cursorpos.x.wrapping_sub(1),
+                    InputMode::Normal => match key.modifiers {
+                        KeyModifiers::CONTROL => {
+                            if let KeyCode::Char(key) = key.code {
+                                match key {
+                                    'c' => break 'top,
+                                    's' => {
+                                        // TODO: handle input
+
+                                        match state.do_step() {
+                                            NeedsInputType::None => (),
+                                            NeedsInputType::Decimal => {
+                                                command_prompt = "Enter Decimal";
+                                                input_mode = InputMode::Command;
+                                                command_type = CommandType::BefungeInput;
+                                            }
+                                            NeedsInputType::Character => {
+                                                command_prompt = "Enter Character";
+                                                input_mode = InputMode::Command;
+                                                command_type = CommandType::BefungeInput;
+                                            }
+                                        }
+                                    }
+                                    'r' => state.restart(),
+
+                                    _ => (),
+                                }
+                            }
+                        }
+                        KeyModifiers::NONE | KeyModifiers::SHIFT => match key.code {
+                            // opposite direction
+                            KeyCode::Backspace => match posdirection {
+                                Direction::Up => cursorpos.y = cursorpos.y.wrapping_add(1),
+                                Direction::Down => cursorpos.y = cursorpos.y.wrapping_sub(1),
+                                Direction::Left => cursorpos.x = cursorpos.x.wrapping_add(1),
+                                Direction::Right => cursorpos.x = cursorpos.x.wrapping_sub(1),
+                            },
+
+                            KeyCode::Char(char) => {
+                                state.setc(cursorpos.x, cursorpos.y, char);
+                                // switch direction on direction items
+                                match char {
+                                    '^' => posdirection = Direction::Up,
+                                    'v' => posdirection = Direction::Down,
+                                    '<' => posdirection = Direction::Left,
+                                    '>' => posdirection = Direction::Right,
+                                    _ => (),
+                                }
+
+                                match posdirection {
+                                    Direction::Up => cursorpos.y = cursorpos.y.wrapping_sub(1),
+                                    Direction::Down => cursorpos.y = cursorpos.y.wrapping_add(1),
+                                    Direction::Left => cursorpos.x = cursorpos.x.wrapping_sub(1),
+                                    Direction::Right => cursorpos.x = cursorpos.x.wrapping_add(1),
+                                }
+                            }
+
+                            KeyCode::Up => {
+                                cursorpos.y = cursorpos.y.wrapping_sub(1);
+                                posdirection = Direction::Up;
+                            }
+                            KeyCode::Down => {
+                                cursorpos.y = cursorpos.y.wrapping_add(1);
+                                posdirection = Direction::Down;
+                            }
+                            KeyCode::Left => {
+                                cursorpos.x = cursorpos.x.wrapping_sub(1);
+                                posdirection = Direction::Left;
+                            }
+                            KeyCode::Right => {
+                                cursorpos.x = cursorpos.x.wrapping_add(1);
+                                posdirection = Direction::Right;
+                            }
+
+                            _ => (),
                         },
-
-                        KeyCode::Char(char) => {
-                            state.setc(cursorpos.x, cursorpos.y, char);
-                            // switch direction on direction items
-                            match char {
-                                '^' => posdirection = Direction::Up,
-                                'v' => posdirection = Direction::Down,
-                                '<' => posdirection = Direction::Left,
-                                '>' => posdirection = Direction::Right,
-                                _ => (),
-                            }
-
-                            match posdirection {
-                                Direction::Up => cursorpos.y = cursorpos.y.wrapping_sub(1),
-                                Direction::Down => cursorpos.y = cursorpos.y.wrapping_add(1),
-                                Direction::Left => cursorpos.x = cursorpos.x.wrapping_sub(1),
-                                Direction::Right => cursorpos.x = cursorpos.x.wrapping_add(1),
-                            }
-                        }
-
-                        KeyCode::Up => {
-                            cursorpos.y = cursorpos.y.wrapping_sub(1);
-                            posdirection = Direction::Up;
-                        }
-                        KeyCode::Down => {
-                            cursorpos.y = cursorpos.y.wrapping_add(1);
-                            posdirection = Direction::Down;
-                        }
-                        KeyCode::Left => {
-                            cursorpos.x = cursorpos.x.wrapping_sub(1);
-                            posdirection = Direction::Left;
-                        }
-                        KeyCode::Right => {
-                            cursorpos.x = cursorpos.x.wrapping_add(1);
-                            posdirection = Direction::Right;
-                        }
-
                         _ => (),
                     },
-                    _ => (),
                 }
             }
         }
@@ -212,4 +299,14 @@ fn main() {
         .execute(terminal::LeaveAlternateScreen)
         .expect("failed to leave alternate screen");
     terminal::disable_raw_mode().expect("failed to disable raw mode");
+}
+
+enum InputMode {
+    Normal,
+    Command,
+}
+
+enum CommandType {
+    Command,
+    BefungeInput,
 }
