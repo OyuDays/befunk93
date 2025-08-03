@@ -1,3 +1,4 @@
+use ahash::HashMap;
 use clap::Parser;
 use crossterm::{
     ExecutableCommand,
@@ -48,6 +49,7 @@ fn draw_space(
     area: Rect,
     offset: Position<u16>,
     cursorpos: Position<u16>,
+    breakpoints: &HashMap<(u16, u16), bool>,
 ) {
     let mut text = Text::default();
     for y in offset.y..offset.y + area.height {
@@ -61,7 +63,9 @@ fn draw_space(
                 span = span.style(Style::default().fg(Color::Black).bg(Color::Blue));
             } else {
                 span = span.style(Style::default().fg(Color::White));
-                if x == cursorpos.x && y == cursorpos.y {
+                if *breakpoints.get(&(x, y)).unwrap_or(&false) {
+                    span = span.patch_style(Style::default().bg(Color::Magenta));
+                } else if x == cursorpos.x && y == cursorpos.y {
                     span = span.patch_style(Style::default().add_modifier(Modifier::REVERSED));
                 }
             };
@@ -175,6 +179,8 @@ struct App {
     pub camera_offset: Position<u16>,
     pub space_area: Rect,
 
+    pub breakpoints: HashMap<(u16, u16), bool>,
+
     pub autoplay: bool,
 
     pub input_mode: InputMode,
@@ -208,6 +214,8 @@ impl App {
             state: FungedState::new(),
             camera_offset: Position::new(0, 0),
             space_area: Rect::default(),
+
+            breakpoints: HashMap::default(),
 
             autoplay: false,
 
@@ -286,6 +294,7 @@ impl App {
                     right_layout[0],
                     self.camera_offset.clone(),
                     self.cursorpos.clone(),
+                    &self.breakpoints,
                 );
                 draw_commandbar(frame, right_layout[1], &self.command_prompt, &self.command);
                 draw_sidebar(frame, &self.state, layout[0]);
@@ -437,14 +446,34 @@ impl App {
     }
 
     fn handle_mouse_event(&mut self, event: MouseEvent) {
-        if let MouseEventKind::Down(MouseButton::Left) = event.kind {
-            if event.column < self.space_area.x + self.space_area.width
-                && event.column >= self.space_area.x
-                && event.row < self.space_area.y + self.space_area.height
-                && event.row >= self.space_area.y
-            {
-                self.cursorpos.x = event.column - self.space_area.x + self.camera_offset.x;
-                self.cursorpos.y = event.row - self.space_area.y + self.camera_offset.y;
+        if let MouseEventKind::Down(button) = event.kind {
+            match button {
+                MouseButton::Left => {
+                    if event.column < self.space_area.x + self.space_area.width
+                        && event.column >= self.space_area.x
+                        && event.row < self.space_area.y + self.space_area.height
+                        && event.row >= self.space_area.y
+                    {
+                        self.cursorpos.x = event.column - self.space_area.x + self.camera_offset.x;
+                        self.cursorpos.y = event.row - self.space_area.y + self.camera_offset.y;
+                    }
+                }
+                MouseButton::Right => {
+                    if event.column < self.space_area.x + self.space_area.width
+                        && event.column >= self.space_area.x
+                        && event.row < self.space_area.y + self.space_area.height
+                        && event.row >= self.space_area.y
+                    {
+                        let x = event.column - self.space_area.x + self.camera_offset.x;
+                        let y = event.row - self.space_area.y + self.camera_offset.y;
+                        if *self.breakpoints.get(&(x, y)).unwrap_or(&false) {
+                            self.breakpoints.remove(&(x, y));
+                        } else {
+                            self.breakpoints.insert((x, y), true);
+                        }
+                    }
+                }
+                _ => (),
             }
         }
     }
@@ -493,6 +522,13 @@ impl App {
                     self.autoplay = false;
                 } else {
                     self.do_step();
+                    if *self
+                        .breakpoints
+                        .get(&(self.state.position.x, self.state.position.y))
+                        .unwrap_or(&false)
+                    {
+                        self.autoplay = false;
+                    }
                 }
             }
 
