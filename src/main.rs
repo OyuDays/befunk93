@@ -1,3 +1,4 @@
+use clap::Parser;
 use crossterm::{
     ExecutableCommand,
     event::{
@@ -16,6 +17,7 @@ use ratatui::{
 use std::{
     fs::File,
     io::{Read, Stdout, Write, stdout},
+    path::PathBuf,
     thread,
     time::Duration,
 };
@@ -29,6 +31,15 @@ fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
 
     eprintln!("backtrace:\n{}", backtrace);
     eprintln!("{}", info);
+}
+
+#[derive(Parser)]
+#[command(about, long_about = None)]
+struct Args {
+    file: Option<PathBuf>,
+
+    #[arg(short, long, help = "FPS cap; set to 0 for no cap")]
+    fps: Option<u16>,
 }
 
 fn draw_space(
@@ -175,10 +186,13 @@ struct App {
     pub command: String,
 
     pub should_stop: bool,
+
+    // args
+    fps: Option<u16>,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(args: Args) -> Self {
         terminal::enable_raw_mode().expect("failed to enable raw mode");
         std::panic::set_hook(Box::new(panic_hook));
 
@@ -188,7 +202,7 @@ impl App {
             .execute(event::EnableMouseCapture)
             .expect("failed to enable mouse capture");
 
-        App {
+        let mut ret = App {
             cursorpos: Position::new(0, 0),
             posdirection: Direction::Right,
             state: FungedState::new(),
@@ -207,7 +221,20 @@ impl App {
             command: String::new(),
 
             should_stop: false,
+
+            fps: args.fps,
+        };
+
+        if let Some(file) = args.file {
+            let mut string = String::new();
+            File::open(file)
+                .expect("passed file invalid")
+                .read_to_string(&mut string)
+                .expect("failed to read passed file to string");
+
+            ret.state.map_from_string(&string);
         }
+        ret
     }
 
     fn get_file(&mut self, filename: &str) -> std::io::Result<String> {
@@ -332,7 +359,7 @@ impl App {
             'p' => {
                 self.autoplay = !self.autoplay;
                 self.state.is_running = true;
-            },
+            }
             'o' => {
                 self.command_prompt = String::from("Open file");
                 self.command.clear();
@@ -468,9 +495,14 @@ impl App {
                     self.do_step();
                 }
             }
-            // TODO: make fps configurable
-            // uncapping takes alot of cpu
-            thread::sleep(Duration::from_millis((1.0 / 60.0 * 1000.0) as u64));
+
+            if let Some(fps) = self.fps {
+                if fps != 0 {
+                    thread::sleep(Duration::from_millis((1.0 / fps as f64 * 1000.0) as u64));
+                }
+            } else {
+                thread::sleep(Duration::from_millis((1.0 / 60.0 * 1000.0) as u64));
+            }
         }
     }
 }
@@ -488,7 +520,8 @@ pub fn setdown() {
 }
 
 fn main() {
-    let mut app = App::new();
+    let args = Args::parse();
+    let mut app = App::new(args);
 
     app.do_loop();
 
