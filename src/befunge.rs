@@ -334,7 +334,10 @@ impl FungedState {
                 b'"' => self.is_string_mode = true,
 
                 // End program
-                b'@' => self.is_running = false,
+                b'@' => {
+                    self.is_running = false;
+                    return NeedsInputType::None;
+                },
 
                 // Digits
                 b'0'..=b'9' => self.stack.push((op - b'0') as i64),

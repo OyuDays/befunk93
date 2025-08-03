@@ -329,7 +329,10 @@ impl App {
             's' => self.do_step(),
             'f' => self.cursorpos = self.state.position.clone(),
             'r' => self.state.restart(),
-            'p' => self.autoplay = !self.autoplay,
+            'p' => {
+                self.autoplay = !self.autoplay;
+                self.state.is_running = true;
+            },
             'o' => {
                 self.command_prompt = String::from("Open file");
                 self.command.clear();
@@ -457,7 +460,11 @@ impl App {
             self.handle_events();
 
             if self.autoplay {
-                self.do_step();
+                if !self.state.is_running {
+                    self.autoplay = false;
+                } else {
+                    self.do_step();
+                }
             }
             // TODO: make fps configurable
             // uncapping takes alot of cpu
