@@ -437,19 +437,21 @@ impl App {
     }
 
     pub fn do_step(&mut self) {
-        match self.state.do_step() {
-            NeedsInputType::None => (),
-            NeedsInputType::Decimal => {
-                self.command_prompt = String::from("Enter Decimal");
-                self.command.clear();
-                self.input_mode = InputMode::Command;
-                self.command_type = CommandType::BefungeInput;
-            }
-            NeedsInputType::Character => {
-                self.command_prompt = String::from("Enter Character");
-                self.command.clear();
-                self.input_mode = InputMode::Command;
-                self.command_type = CommandType::BefungeInput;
+        if let InputMode::Normal = self.input_mode {
+            match self.state.do_step() {
+                NeedsInputType::None => (),
+                NeedsInputType::Decimal => {
+                    self.command_prompt = String::from("Enter Decimal");
+                    self.command.clear();
+                    self.input_mode = InputMode::Command;
+                    self.command_type = CommandType::BefungeInput;
+                }
+                NeedsInputType::Character => {
+                    self.command_prompt = String::from("Enter Character");
+                    self.command.clear();
+                    self.input_mode = InputMode::Command;
+                    self.command_type = CommandType::BefungeInput;
+                }
             }
         }
     }
