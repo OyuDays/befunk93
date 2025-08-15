@@ -121,6 +121,11 @@ impl FungedState {
     }
 
     pub fn setc(&mut self, x: u16, y: u16, v: char) {
+        // waste of space
+        if v == ' ' {
+            self.map.remove(&(x, y));
+            return
+        }
         self.map.insert((x, y), v as i64);
     }
 
