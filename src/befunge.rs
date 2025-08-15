@@ -89,15 +89,19 @@ impl FungedState {
             .map(|(x, y)| ((*x, *y), *self.map.get(&(*x, *y)).unwrap()));
 
         for ((x, y), v) in entries {
+            let character = char::from_u32(v as u32).expect("failed to turn map into string");
+            // waste of space
+            if character == ' ' {
+                continue
+            }
             let line = &mut lines[y as usize];
             if x as usize >= line.len() {
                 line.extend(iter::repeat_n(' ', x as usize - line.len()));
                 assert_ne!(v, '\n' as i64);
                 assert_ne!(v, '\r' as i64);
-                line.push(char::from_u32(v as u32).expect("failed to turn map into string"));
+                line.push(character);
             } else {
-                line[x as usize] =
-                    char::from_u32(v as u32).expect("failed to turn map into string");
+                line[x as usize] = character;
             }
         }
 
