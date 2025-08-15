@@ -351,6 +351,20 @@ impl FungedState {
                 // Digits
                 b'0'..=b'9' => self.stack.push((op - b'0') as i64),
 
+                // CUSTOM OPERATIONS
+                // move (pop y,x and move to x,Y)
+                b'm' => {
+                    let y = self.stack.pop().unwrap_or(0);
+                    let x = self.stack.pop().unwrap_or(0);
+
+                    self.position = Position::new(
+                        x.clamp(0, u16::MAX as i64).try_into().unwrap(),
+                        y.clamp(0, u16::MAX as i64).try_into().unwrap(),
+                    );
+
+                    return NeedsInputType::None
+                }
+
                 _ => (),
             }
         }
