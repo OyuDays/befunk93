@@ -34,13 +34,12 @@ fn panic_hook(info: &std::panic::PanicHookInfo<'_>) {
     eprintln!("{}", info);
 }
 
+// there used to be more flags, but they have since been removed and its probably a good idea to
+// still use clap incase i ever want to add more
 #[derive(Parser)]
 #[command(about, long_about = None)]
 struct Args {
     file: Option<PathBuf>,
-
-    #[arg(short, long, help = "FPS cap; set to 0 for no cap")]
-    fps: Option<u16>,
 }
 
 fn draw_space(
@@ -192,9 +191,6 @@ struct App {
     pub command: String,
 
     pub should_stop: bool,
-
-    // args
-    fps: Option<u16>,
 }
 
 impl App {
@@ -229,8 +225,6 @@ impl App {
             command: String::new(),
 
             should_stop: false,
-
-            fps: args.fps,
         };
 
         if let Some(file) = args.file {
@@ -479,16 +473,17 @@ impl App {
     }
 
     fn handle_events(&mut self) {
-        while event::poll(Duration::ZERO).unwrap() {
-            match event::read().expect("failed to read events") {
-                Event::Key(key) => match self.input_mode {
-                    InputMode::Command => self.handle_command_inputmode(key),
+        if self.autoplay && !event::poll(Duration::ZERO).unwrap() {
+            return;
+        }
+        match event::read().expect("failed to read events") {
+            Event::Key(key) => match self.input_mode {
+                InputMode::Command => self.handle_command_inputmode(key),
 
-                    InputMode::Normal => self.handle_normal_inputmode(key),
-                },
-                Event::Mouse(event) => self.handle_mouse_event(event),
-                _ => (),
-            }
+                InputMode::Normal => self.handle_normal_inputmode(key),
+            },
+            Event::Mouse(event) => self.handle_mouse_event(event),
+            _ => (),
         }
     }
 
@@ -530,14 +525,6 @@ impl App {
                         self.autoplay = false;
                     }
                 }
-            }
-
-            if let Some(fps) = self.fps {
-                if fps != 0 {
-                    thread::sleep(Duration::from_millis((1.0 / fps as f64 * 1000.0) as u64));
-                }
-            } else {
-                thread::sleep(Duration::from_millis((1.0 / 60.0 * 1000.0) as u64));
             }
         }
     }
