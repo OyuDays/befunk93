@@ -19,7 +19,6 @@ use std::{
     fs::File,
     io::{Read, Stdout, Write, stdout},
     path::PathBuf,
-    thread,
     time::Duration,
 };
 mod befunge;
@@ -391,10 +390,10 @@ impl App {
             KeyModifiers::NONE | KeyModifiers::SHIFT => match key.code {
                 // opposite direction
                 KeyCode::Backspace => match self.posdirection {
-                    Direction::Up => self.cursorpos.y = self.cursorpos.y.wrapping_add(1),
-                    Direction::Down => self.cursorpos.y = self.cursorpos.y.wrapping_sub(1),
-                    Direction::Left => self.cursorpos.x = self.cursorpos.x.wrapping_add(1),
-                    Direction::Right => self.cursorpos.x = self.cursorpos.x.wrapping_sub(1),
+                    Direction::Up => self.cursorpos.y = self.cursorpos.y.saturating_add(1),
+                    Direction::Down => self.cursorpos.y = self.cursorpos.y.saturating_sub(1),
+                    Direction::Left => self.cursorpos.x = self.cursorpos.x.saturating_add(1),
+                    Direction::Right => self.cursorpos.x = self.cursorpos.x.saturating_sub(1),
                 },
 
                 KeyCode::Char(char) => {
@@ -409,27 +408,27 @@ impl App {
                     }
 
                     match self.posdirection {
-                        Direction::Up => self.cursorpos.y = self.cursorpos.y.wrapping_sub(1),
-                        Direction::Down => self.cursorpos.y = self.cursorpos.y.wrapping_add(1),
-                        Direction::Left => self.cursorpos.x = self.cursorpos.x.wrapping_sub(1),
-                        Direction::Right => self.cursorpos.x = self.cursorpos.x.wrapping_add(1),
+                        Direction::Up => self.cursorpos.y = self.cursorpos.y.saturating_sub(1),
+                        Direction::Down => self.cursorpos.y = self.cursorpos.y.saturating_add(1),
+                        Direction::Left => self.cursorpos.x = self.cursorpos.x.saturating_sub(1),
+                        Direction::Right => self.cursorpos.x = self.cursorpos.x.saturating_add(1),
                     }
                 }
 
                 KeyCode::Up => {
-                    self.cursorpos.y = self.cursorpos.y.wrapping_sub(1);
+                    self.cursorpos.y = self.cursorpos.y.saturating_sub(1);
                     self.posdirection = Direction::Up;
                 }
                 KeyCode::Down => {
-                    self.cursorpos.y = self.cursorpos.y.wrapping_add(1);
+                    self.cursorpos.y = self.cursorpos.y.saturating_add(1);
                     self.posdirection = Direction::Down;
                 }
                 KeyCode::Left => {
-                    self.cursorpos.x = self.cursorpos.x.wrapping_sub(1);
+                    self.cursorpos.x = self.cursorpos.x.saturating_sub(1);
                     self.posdirection = Direction::Left;
                 }
                 KeyCode::Right => {
-                    self.cursorpos.x = self.cursorpos.x.wrapping_add(1);
+                    self.cursorpos.x = self.cursorpos.x.saturating_add(1);
                     self.posdirection = Direction::Right;
                 }
 
