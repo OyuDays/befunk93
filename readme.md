@@ -7,5 +7,11 @@ it is however extremely imperformant
 
 note that it is not fully compliant, since it has a differently sized fungespace and a differently sized stack
 
+## TODO
+- [ ] multithreading (befunge is on a different thread
+- [ ] help menu
+- [ ] better commands? maybe not everything has to be a keybind?
+- [ ] autocompletion in writing/opening files maybe?
+
 ## Thanks
 [PartyWumpus](https://github.com/partywumpus) - inspiring me to make this project with their [befunge-editor](https://github.com/PartyWumpus/befunge-editor)
