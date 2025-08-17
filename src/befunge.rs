@@ -40,6 +40,9 @@ pub struct FungedState {
     pub output: String,
     pub input: String,
     pub is_running: bool,
+
+    pub max_width: u16,
+    pub max_height: u16,
 }
 
 impl Default for FungedState {
@@ -61,6 +64,9 @@ impl FungedState {
             output: String::new(),
             input: String::new(),
             is_running: false,
+
+            max_width: 0,
+            max_height: 0,
         }
     }
 
@@ -92,7 +98,7 @@ impl FungedState {
             let character = char::from_u32(v as u32).expect("failed to turn map into string");
             // waste of space
             if character == ' ' {
-                continue
+                continue;
             }
             let line = &mut lines[y as usize];
             if x as usize >= line.len() {
@@ -121,6 +127,13 @@ impl FungedState {
     }
 
     pub fn set(&mut self, x: u16, y: u16, v: i64) {
+        if x > self.max_width {
+            self.max_width = x
+        }
+        if y > self.max_height {
+            self.max_height = y
+        }
+
         self.map.insert((x, y), v);
     }
 
@@ -128,8 +141,20 @@ impl FungedState {
         // waste of space
         if v == ' ' {
             self.map.remove(&(x, y));
-            return
+            if x == self.max_width || y == self.max_height {
+                self.calculate_width_height();
+            }
+
+            return;
         }
+
+        if x > self.max_width {
+            self.max_width = x
+        }
+        if y > self.max_height {
+            self.max_height = y
+        }
+
         self.map.insert((x, y), v as i64);
     }
 
@@ -142,6 +167,21 @@ impl FungedState {
         self.output.clear();
         self.input.clear();
         self.put_map.clear();
+    }
+
+    pub fn calculate_width_height(&mut self) {
+        let mut w = 0;
+        let mut h = 0;
+        for (x, y) in self.map.keys() {
+            if *x > w {
+                w = *x
+            }
+            if *y > h {
+                h = *y
+            }
+        }
+        self.max_width = w;
+        self.max_height = h;
     }
 
     pub fn do_step(&mut self) -> NeedsInputType {
@@ -191,7 +231,8 @@ impl FungedState {
                 b'/' => {
                     let a = self.stack.pop().unwrap_or(0);
                     let b = self.stack.pop().unwrap_or(0);
-                    if a == 0 { // divide by zero protection
+                    if a == 0 {
+                        // divide by zero protection
                         self.stack.push(i64::MAX);
                     } else {
                         self.stack.push(b.wrapping_div(a));
@@ -284,14 +325,20 @@ impl FungedState {
                     let x = self.stack.pop().unwrap_or(0);
                     let v = self.stack.pop().unwrap_or(0);
 
+                    let x: u16 = x.clamp(0, u16::MAX.into()).try_into().unwrap();
+                    let y: u16 = y.clamp(0, u16::MAX.into()).try_into().unwrap();
+
+                    // not checking for reducing max_width/height, because i dont think thats a
+                    // good thing to do
+                    if x > self.max_width {
+                        self.max_width = x;
+                    }
+                    if y > self.max_height {
+                        self.max_height = y;
+                    }
+
                     // dont worry, should never panic (aslong as clamp works)
-                    self.put_map.insert(
-                        (
-                            x.clamp(0, u16::MAX.into()).try_into().unwrap(),
-                            y.clamp(0, u16::MAX.into()).try_into().unwrap(),
-                        ),
-                        v,
-                    );
+                    self.put_map.insert((x, y), v);
                 }
                 // get (pop y,x and push value at x,y)
                 b'g' => {
@@ -346,7 +393,7 @@ impl FungedState {
                 b'@' => {
                     self.is_running = false;
                     return NeedsInputType::None;
-                },
+                }
 
                 // Digits
                 b'0'..=b'9' => self.stack.push((op - b'0') as i64),
@@ -362,7 +409,7 @@ impl FungedState {
                         y.clamp(0, u16::MAX as i64).try_into().unwrap(),
                     );
 
-                    return NeedsInputType::None
+                    return NeedsInputType::None;
                 }
 
                 _ => (),
@@ -381,6 +428,18 @@ impl FungedState {
             Direction::Left => self.position.x = self.position.x.wrapping_sub(1),
             Direction::Right => self.position.x = self.position.x.wrapping_add(1),
         }
+
+        if self.position.x == u16::MAX {
+            self.position.x = self.max_width
+        } else if self.position.x > self.max_width {
+            self.position.x = 0;
+        }
+
+        if self.position.y == u16::MAX {
+            self.position.y = self.max_height
+        } else if self.position.y > self.max_height {
+            self.position.y = 0
+        }
     }
 }
 
@@ -388,6 +447,7 @@ impl FungedState {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     pub fn do_n_steps(state: &mut FungedState, n: u16) {
         state.is_running = true;
         for _ in 0..n {
@@ -415,10 +475,10 @@ mod tests {
 
         state.map_from_string(
             "v \n\
-             >0123456789",
+             >0123456789@",
         );
 
-        do_n_steps(&mut state, 12);
+        run_until_completion(&mut state);
 
         assert_eq!(state.stack, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         assert_eq!(state.position.x, 11);
@@ -559,29 +619,52 @@ mod tests {
         let mut state = FungedState::new();
 
         state.setc(0, 0, '^');
-        state.setc(0, u16::MAX, '<');
-        state.setc(u16::MAX, u16::MAX, 'v');
-        state.setc(u16::MAX, 0, '>');
+        state.setc(0, 4, '<');
+        state.setc(4, 4, 'v');
+        state.setc(4, 0, '>');
 
         state.do_step();
         assert_eq!(state.position.x, 0);
-        assert_eq!(state.position.y, u16::MAX);
+        assert_eq!(state.position.y, 4);
         state.do_step();
-        assert_eq!(state.position.x, u16::MAX);
-        assert_eq!(state.position.y, u16::MAX);
+        assert_eq!(state.position.x, 4);
+        assert_eq!(state.position.y, 4);
         state.do_step();
-        assert_eq!(state.position.x, u16::MAX);
+        assert_eq!(state.position.x, 4);
         assert_eq!(state.position.y, 0);
         state.do_step();
         assert_eq!(state.position.x, 0);
         assert_eq!(state.position.y, 0);
     }
 
+    #[test]
+    fn wrapping_put() {
+        let mut state = FungedState::new();
+        state.map_from_string("\"@\"90p");
+
+        run_until_completion(&mut state);
+        assert_eq!(state.position.x, 9);
+
+        state.restart();
+
+        state.map_from_string(
+            "v \n\
+            \"\n\
+            @ \n\
+            \"\n\
+            0 \n\
+            9 \n\
+            p",
+        );
+        run_until_completion(&mut state);
+        assert_eq!(state.position.y, 9);
+    }
+
     // this test checks for crashes
     #[test]
     fn wrapping_stack() {
         let mut state = FungedState::new();
-        
+
         state.stack.push(i64::MAX);
         state.map_from_string("1+1-2*@");
 
