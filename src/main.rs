@@ -87,7 +87,7 @@ fn draw_space(
 
 fn draw_commandbar(frame: &mut Frame, area: Rect, command_prompt: &str, command: &str) {
     let block = Block::new()
-        .borders(Borders::NONE)
+        .borders(Borders::ALL)
         .padding(Padding::ZERO)
         .bg(Color::Black);
 
@@ -101,7 +101,7 @@ fn draw_commandbar(frame: &mut Frame, area: Rect, command_prompt: &str, command:
 
 fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
     let block = Block::new()
-        .borders(Borders::NONE)
+        .borders(Borders::ALL)
         .padding(Padding::ZERO)
         .bg(Color::Black);
 
@@ -161,7 +161,7 @@ fn draw_sidebar(frame: &mut Frame, state: &FungedState, area: Rect) {
         .constraints([
             Constraint::Min(10),
             Constraint::Length(10),
-            Constraint::Length((commands_vec.len() + 1).try_into().unwrap()),
+            Constraint::Length((commands_vec.len() + 2).try_into().unwrap()),
         ])
         .split(Rect::new(0, 0, area.width, area.height));
 
@@ -264,7 +264,7 @@ impl App {
                     .split(Rect::new(0, 0, size.width, size.height));
                 let right_layout = Layout::default()
                     .direction(layout::Direction::Vertical)
-                    .constraints([Constraint::Min(10), Constraint::Length(2)])
+                    .constraints([Constraint::Min(12), Constraint::Length(3)])
                     .split(layout[1]);
 
                 frame.area();
